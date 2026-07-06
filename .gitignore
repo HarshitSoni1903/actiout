@@ -1,3 +1,31 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor/OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# Coverage
+coverage
+
+# Internal planning workspace (not part of the shipped app)
+.superpowers/
+
 00_short_prompt.md
 01_product_brief.md
 02_system_design.md 
