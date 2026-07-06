@@ -1,0 +1,15 @@
+{
+  "bundle_name": "ActiOut Claude handoff",
+  "files": [
+    "00_short_prompt.md",
+    "01_product_brief.md",
+    "02_system_design.md",
+    "03_schema.md",
+    "04_types_and_events.md",
+    "05_acceptance_criteria.md",
+    "README.md",
+    "handoff_index.csv",
+    "session_flow.png",
+    "session_flow.png.meta.json"
+  ]
+}
