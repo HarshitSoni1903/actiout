@@ -1,13 +1,7 @@
+import { normalizeExerciseName } from '../services/exercise-service';
 import { nowIso } from '../utils/dates';
 import { newId } from '../utils/ids';
 import { ActiOutDB, db } from './schema';
-
-// normalizedName = lowercase, trimmed, single-spaced version of the name.
-// Kept inline here for now; a shared `normalizeExerciseName` helper arrives
-// with Task 3's exercise-service.
-function normalizeExerciseName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
-}
 
 export const STARTER_EXERCISES: ReadonlyArray<{ name: string; category: string }> = [
   // chest
