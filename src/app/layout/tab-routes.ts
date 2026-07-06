@@ -1,7 +1,5 @@
-// The exact set of routes the TabBar shows itself on. Any route not in this
-// list (routine detail/new, an in-progress session, etc.) hides the TabBar.
-export const TAB_PATHS = ['/', '/routines', '/progress', '/settings'] as const;
-
+// The TabBar shows on every route EXCEPT active session screens — an
+// in-progress workout is the one full-screen, distraction-free flow.
 export function isTabRoute(pathname: string): boolean {
-  return (TAB_PATHS as readonly string[]).includes(pathname);
+  return !pathname.startsWith('/session/');
 }

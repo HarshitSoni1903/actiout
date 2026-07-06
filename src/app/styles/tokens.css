@@ -26,13 +26,20 @@
   --touch-target: 44px;
 }
 
-/* Explicit light theme (user preference = 'light') */
+/* Explicit light theme (user preference = 'light').
+   Accent/danger are darkened for WCAG AA (>=4.5:1) against the light bg,
+   surface, and surface-2; accent-text flips to white because dark text on
+   the darker light-mode accent would fail contrast. Keep this block and
+   the media-query block below identical. */
 [data-theme='light'] {
   --color-bg: #f5f5f4;
   --color-surface: #ffffff;
   --color-surface-2: #ececea;
   --color-text: #17171c;
   --color-text-muted: #6b6b73;
+  --color-accent: #1f7a4d;
+  --color-accent-text: #ffffff;
+  --color-danger: #c62a2f;
   --color-border: #e0e0e2;
 }
 
@@ -44,6 +51,9 @@
     --color-surface-2: #ececea;
     --color-text: #17171c;
     --color-text-muted: #6b6b73;
+    --color-accent: #1f7a4d;
+    --color-accent-text: #ffffff;
+    --color-danger: #c62a2f;
     --color-border: #e0e0e2;
   }
 }
