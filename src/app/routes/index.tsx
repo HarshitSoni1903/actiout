@@ -1,8 +1,10 @@
 import { createBrowserRouter } from 'react-router-dom';
 import App from '../App';
 import { HomeScreen } from '../../components/home/HomeScreen';
+import { RoutineListScreen } from '../../components/routines/RoutineListScreen';
+import { RoutineEditorScreen } from '../../components/routines/RoutineEditorScreen';
 
-// Placeholder screens — replaced by Tasks 10-13. Each renders only its title
+// Placeholder screens — replaced by Tasks 11-13. Each renders only its title
 // so navigation and the app shell can be verified end to end.
 function Screen({ title }: { title: string }) {
   return (
@@ -18,9 +20,9 @@ export const router = createBrowserRouter([
     element: <App />,
     children: [
       { index: true, element: <HomeScreen /> },
-      { path: 'routines', element: <Screen title="Routines" /> },
-      { path: 'routines/new', element: <Screen title="New Routine" /> },
-      { path: 'routines/:id', element: <Screen title="Routine" /> },
+      { path: 'routines', element: <RoutineListScreen /> },
+      { path: 'routines/new', element: <RoutineEditorScreen /> },
+      { path: 'routines/:id', element: <RoutineEditorScreen /> },
       { path: 'session/:id', element: <Screen title="Session" /> },
       { path: 'progress', element: <Screen title="Progress" /> },
       { path: 'settings', element: <Screen title="Settings" /> },
