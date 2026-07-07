@@ -50,6 +50,7 @@ export function RoutineItemRow({
 }: RoutineItemRowProps) {
   const [expanded, setExpanded] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const effectiveWeightUnit = item.defaultWeightUnit ?? weightUnit;
 
   return (
     <li className="routine-item-row">
@@ -131,10 +132,10 @@ export function RoutineItemRow({
             min={0}
           />
           <Stepper
-            label={`Weight (${item.defaultWeightUnit ?? weightUnit})`}
+            label={`Weight (${effectiveWeightUnit})`}
             value={item.defaultWeight}
-            onChange={(v) => onChange({ defaultWeight: v, defaultWeightUnit: v === undefined ? item.defaultWeightUnit : weightUnit })}
-            step={weightUnit === 'kg' ? 1 : 5}
+            onChange={(v) => onChange({ defaultWeight: v, defaultWeightUnit: v === undefined ? undefined : effectiveWeightUnit })}
+            step={effectiveWeightUnit === 'kg' ? 1 : 5}
             min={0}
             allowDecimal
           />
