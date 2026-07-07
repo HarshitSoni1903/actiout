@@ -1,6 +1,7 @@
 import type { RoutineTemplate } from '../../domain/types';
 import { Button } from '../common/Button';
 import { EmptyState } from '../common/EmptyState';
+import { RoutineStartRows } from './RoutineStartRows';
 
 export type TodayRoutineListProps = {
   routines: RoutineTemplate[];
@@ -52,47 +53,15 @@ export function TodayRoutineList({
         </button>
       </div>
 
-      <ul className="today-list__items">
-        {routines.map((routine) => {
-          const done = doneIds.has(routine.id);
-          const checked = selectedIds.has(routine.id);
-
-          return (
-            <li key={routine.id} className="today-list__item">
-              {multiSelect ? (
-                <label className="today-list__checkbox-label">
-                  <input
-                    type="checkbox"
-                    className="today-list__checkbox"
-                    checked={checked}
-                    onChange={() => onToggleSelect(routine.id)}
-                  />
-                  <span className="today-list__name">{routine.name}</span>
-                </label>
-              ) : (
-                <span className="today-list__name">
-                  {done ? (
-                    <span className="today-list__check" aria-hidden="true">
-                      &#10003;
-                    </span>
-                  ) : null}
-                  {routine.name}
-                  {done ? <span className="visually-hidden"> (done)</span> : null}
-                </span>
-              )}
-
-              {!multiSelect ? (
-                <Button
-                  variant={routine.id === suggestedId ? 'primary' : 'ghost'}
-                  onClick={() => onStart(routine.id)}
-                >
-                  Start
-                </Button>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+      <RoutineStartRows
+        routines={routines}
+        doneIds={doneIds}
+        suggestedId={suggestedId}
+        multiSelect={multiSelect}
+        selectedIds={selectedIds}
+        onToggleSelect={onToggleSelect}
+        onStart={onStart}
+      />
 
       {multiSelect ? (
         <Button variant="primary" disabled={selectedIds.size === 0} onClick={onStartSelected}>

@@ -17,6 +17,10 @@
   align-self: flex-start;
 }
 
+.home-screen__all-routines {
+  align-self: flex-start;
+}
+
 .home-screen__quick-link {
   align-self: flex-start;
   min-height: var(--touch-target);
@@ -99,13 +103,15 @@
   font-weight: 500;
 }
 
-.today-list__items {
+/* Routine start rows — shared by the Today section and the routine picker */
+
+.routine-rows {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.today-list__item {
+.routine-rows__item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -114,11 +120,11 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-.today-list__item:last-child {
+.routine-rows__item:last-child {
   border-bottom: none;
 }
 
-.today-list__name {
+.routine-rows__name {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -126,22 +132,52 @@
   color: var(--color-text);
 }
 
-.today-list__check {
+.routine-rows__category {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.routine-rows__check {
   color: var(--color-accent);
   font-weight: 700;
 }
 
-.today-list__checkbox-label {
+.routine-rows__checkbox-label {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   min-height: var(--touch-target);
 }
 
-.today-list__checkbox {
+.routine-rows__checkbox {
   width: 20px;
   height: 20px;
   accent-color: var(--color-accent);
+}
+
+/* Routine picker modal */
+
+.routine-picker__header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-2);
+}
+
+.routine-picker__select-link {
+  min-height: var(--touch-target);
+  color: var(--color-accent);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.routine-picker__start-selected {
+  width: 100%;
+  margin-top: var(--space-3);
+}
+
+.routine-picker__empty {
+  font-size: 14px;
+  color: var(--color-text-muted);
 }
 
 /* Bodyweight quick add */

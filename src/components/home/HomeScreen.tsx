@@ -3,13 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { addBodyweight, listBodyweight } from '../../services/bodyweight-service';
 import { getPreferences } from '../../services/preference-service';
-import { routinesForWeekday } from '../../services/routine-service';
-import { dnfSession, getActiveDraft, listSessions, startQuickSession, startSession } from '../../services/session-service';
+import { listRoutines, routinesForWeekday } from '../../services/routine-service';
+import {
+  DraftExistsError,
+  dnfSession,
+  getActiveDraft,
+  listSessions,
+  startQuickSession,
+  startSession,
+} from '../../services/session-service';
 import { useUiStore } from '../../state/ui-store';
 import { todayLocalDate, weekdayOf } from '../../utils/dates';
 import { Button } from '../common/Button';
 import { BodyweightQuickAdd } from './BodyweightQuickAdd';
 import { DraftCard } from './DraftCard';
+import { RoutinePickerModal } from './RoutinePickerModal';
 import { StartConflictModal } from './StartConflictModal';
 import { TodayRoutineList } from './TodayRoutineList';
 import './home.css';
@@ -31,12 +39,14 @@ export function HomeScreen() {
 
   const draft = useLiveQuery(() => getActiveDraft(), []);
   const todaysRoutines = useLiveQuery(() => routinesForWeekday(weekday), [weekday]);
+  const allRoutines = useLiveQuery(() => listRoutines(), []);
   const completedSessions = useLiveQuery(() => listSessions({ statuses: ['completed'] }), []);
   const preferences = useLiveQuery(() => getPreferences(), []);
   const bodyweightEntries = useLiveQuery(() => listBodyweight(), []);
 
   const [conflictOpen, setConflictOpen] = useState(false);
   const [pendingStart, setPendingStart] = useState<PendingStart | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [multiSelect, setMultiSelect] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -55,13 +65,23 @@ export function HomeScreen() {
     [todaysRoutines, doneRoutineIds]
   );
 
+  // True when at least one routine exists that is not scheduled today — the
+  // quiet "All routines" entry point exists so those can still be started.
+  const hasUnscheduledRoutines = useMemo(() => {
+    const todayIds = new Set((todaysRoutines ?? []).map((routine) => routine.id));
+    return (allRoutines ?? []).some((routine) => !todayIds.has(routine.id));
+  }, [allRoutines, todaysRoutines]);
+
   async function launch(routineTemplateIds: string[]) {
     try {
       const session =
         routineTemplateIds.length > 0 ? await startSession(routineTemplateIds) : await startQuickSession();
       navigate(`/session/${session.id}`);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Could not start session', 'error');
+      showToast(
+        error instanceof DraftExistsError ? 'A workout is already in progress.' : 'Could not start the session.',
+        'error'
+      );
     }
   }
 
@@ -85,7 +105,12 @@ export function HomeScreen() {
       return;
     }
     // 'close-and-start-new'
-    await dnfSession(activeDraft.id);
+    try {
+      await dnfSession(activeDraft.id);
+    } catch {
+      showToast('Could not close the current session.', 'error');
+      return;
+    }
     await launch(routineTemplateIds);
   }
 
@@ -99,7 +124,12 @@ export function HomeScreen() {
     if (!draft) {
       return;
     }
-    await dnfSession(draft.id);
+    try {
+      await dnfSession(draft.id);
+    } catch {
+      showToast('Could not close the session.', 'error');
+      return;
+    }
     showToast('Session marked as not finished');
   }
 
@@ -117,7 +147,12 @@ export function HomeScreen() {
     const start = pendingStart;
     setPendingStart(null);
     if (toReplace && start) {
-      await dnfSession(toReplace.id);
+      try {
+        await dnfSession(toReplace.id);
+      } catch {
+        showToast('Could not close the current session.', 'error');
+        return;
+      }
       await launch(start.routineTemplateIds);
     }
   }
@@ -145,11 +180,12 @@ export function HomeScreen() {
   }
 
   function handleStartAWorkout() {
-    if ((todaysRoutines ?? []).length === 0) {
-      void attemptStart([]);
-    } else {
-      setMultiSelect(true);
-    }
+    setPickerOpen(true);
+  }
+
+  async function handlePickerStart(routineTemplateIds: string[]) {
+    setPickerOpen(false);
+    await attemptStart(routineTemplateIds);
   }
 
   async function handleStartSelected() {
@@ -177,7 +213,7 @@ export function HomeScreen() {
     <div className="home-screen">
       <h1 className="home-screen__date">{formatDateHeader(today)}</h1>
 
-      {draft ? <DraftCard draft={draft} onResume={handleResumeDraft} onMarkDnf={handleMarkDnf} /> : null}
+      {draft ? <DraftCard draft={draft} onResume={handleResumeDraft} onMarkDnf={() => void handleMarkDnf()} /> : null}
 
       {routinesLoaded ? (
         <TodayRoutineList
@@ -200,6 +236,12 @@ export function HomeScreen() {
         </Button>
       ) : null}
 
+      {hasUnscheduledRoutines && (todaysRoutines ?? []).length > 0 && !multiSelect ? (
+        <Button variant="ghost" className="home-screen__all-routines" onClick={() => setPickerOpen(true)}>
+          All routines
+        </Button>
+      ) : null}
+
       <button type="button" className="home-screen__quick-link" onClick={() => void attemptStart([])}>
         Quick session
       </button>
@@ -210,6 +252,13 @@ export function HomeScreen() {
         latestDate={latest?.entryDate}
         preferredUnit={preferences?.weightUnit ?? 'lb'}
         onSave={handleBodyweightSave}
+      />
+
+      <RoutinePickerModal
+        open={pickerOpen}
+        routines={allRoutines ?? []}
+        onStart={(ids) => void handlePickerStart(ids)}
+        onClose={() => setPickerOpen(false)}
       />
 
       {draft ? (
