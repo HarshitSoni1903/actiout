@@ -1,0 +1,340 @@
+/* Progress screen */
+
+.progress-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  text-align: left;
+}
+
+.progress-screen__title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.progress-screen__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Shared chart text/axis tokens — used by SequenceChart, BodyweightChart,
+   ConsistencyStrip. Text is always a text token, never the accent color. */
+
+.chart-axis {
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.chart-caption {
+  fill: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.chart-caption-muted {
+  fill: var(--color-text-muted);
+  font-size: 9px;
+}
+
+.chart-value-label {
+  fill: var(--color-text);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* Exercise picker */
+
+.exercise-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.exercise-picker__search {
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 16px;
+}
+
+.exercise-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.exercise-picker__item {
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  text-align: left;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 15px;
+}
+
+.exercise-picker__item--active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.exercise-picker__no-match {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+/* PR block */
+
+.pr-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.pr-block__stats {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.pr-block__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pr-block__stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.pr-block__stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.pr-block__stat-date {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.pr-block__dnf-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-target);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.pr-block__dnf-checkbox {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-accent);
+}
+
+/* Sequence chart */
+
+.sequence-chart {
+  width: 100%;
+  height: auto;
+}
+
+.sequence-chart__bar {
+  fill: var(--color-accent);
+}
+
+/* Bodyweight chart */
+
+.bodyweight-chart {
+  width: 100%;
+  height: auto;
+}
+
+.bodyweight-chart__line {
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+
+.bodyweight-chart__marker {
+  fill: var(--color-accent);
+}
+
+.bodyweight-chart__last-value {
+  fill: var(--color-text);
+  font-size: 14px;
+  font-weight: 700;
+  /* Halo so the label stays legible where the polyline passes behind it
+     (e.g. a descending trend running straight into the last point). Uses
+     the bg token (not white) so it works in both themes. */
+  paint-order: stroke;
+  stroke: var(--color-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* Bodyweight entry list */
+
+.bodyweight-entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.bodyweight-entry-list__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.bodyweight-entry-list__main {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.bodyweight-entry-list__date {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.bodyweight-entry-list__value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.bodyweight-entry-list__remove-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-danger);
+  font-size: 18px;
+  border-radius: var(--radius);
+}
+
+.bodyweight-entry-list__confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.bodyweight-entry-list__confirm-btn {
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  color: var(--color-danger);
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+}
+
+.bodyweight-entry-list__cancel-btn {
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+/* Consistency strip */
+
+.consistency-strip {
+  width: 100%;
+  height: auto;
+}
+
+.consistency-strip__dot {
+  fill: var(--color-surface-2);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.consistency-strip__dot--filled {
+  fill: var(--color-accent);
+  stroke: none;
+}
+
+.consistency-strip__bar {
+  fill: var(--color-accent);
+}
+
+/* History list */
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.history-list__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.history-list__main {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.history-list__date {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.history-list__position {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.history-list__sets {
+  font-size: 14px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-list__dnf-badge {
+  flex-shrink: 0;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  font-size: 11px;
+  font-weight: 700;
+}

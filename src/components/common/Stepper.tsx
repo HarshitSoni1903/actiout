@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import type { ChangeEvent } from 'react';
 
 export type StepperProps = {
@@ -16,21 +16,44 @@ function round(n: number, allowDecimal: boolean): number {
 
 export function Stepper({ value, onChange, step = 1, min, label, allowDecimal = false }: StepperProps) {
   const inputId = useId();
+  // Buffers raw keystrokes while the input is focused (non-null = focused)
+  // so the fully-controlled `value` prop round-tripping through the parent
+  // (e.g. Dexie/liveQuery) can't snap typed text — like a trailing decimal
+  // point — back to a rounded echo mid-entry. Reverts to the prop on blur.
+  const [draft, setDraft] = useState<string | null>(null);
 
   const clamp = (n: number): number => (min !== undefined && n < min ? min : n);
 
   const handleDecrement = () => {
     const base = value ?? 0;
-    onChange(clamp(round(base - step, allowDecimal)));
+    const next = clamp(round(base - step, allowDecimal));
+    onChange(next);
+    if (draft !== null) {
+      setDraft(String(next));
+    }
   };
 
   const handleIncrement = () => {
     const base = value ?? 0;
-    onChange(clamp(round(base + step, allowDecimal)));
+    const next = clamp(round(base + step, allowDecimal));
+    onChange(next);
+    if (draft !== null) {
+      setDraft(String(next));
+    }
+  };
+
+  const handleFocus = () => {
+    setDraft(value === undefined ? '' : String(value));
+  };
+
+  const handleBlur = () => {
+    setDraft(null);
   };
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const raw = event.target.value;
+    setDraft(raw);
+
     if (raw.trim() === '') {
       onChange(undefined);
       return;
@@ -43,6 +66,8 @@ export function Stepper({ value, onChange, step = 1, min, label, allowDecimal = 
 
     onChange(clamp(parsed));
   };
+
+  const displayValue = draft ?? (value === undefined ? '' : String(value));
 
   return (
     <div className="stepper">
@@ -64,8 +89,10 @@ export function Stepper({ value, onChange, step = 1, min, label, allowDecimal = 
           type="text"
           inputMode={allowDecimal ? 'decimal' : 'numeric'}
           placeholder="—"
-          value={value === undefined ? '' : String(value)}
+          value={displayValue}
           onChange={handleInputChange}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
         />
         <button
           type="button"

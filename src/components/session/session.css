@@ -1,0 +1,291 @@
+/* Session screen — full-screen live workout logging (no TabBar) */
+
+.session-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  text-align: left;
+  /* Room at the bottom for the fixed add-exercise + finish-bar footer. */
+  padding-bottom: 176px;
+}
+
+.session-screen--loading {
+  min-height: 100dvh;
+}
+
+/* Read-only sessions (completed/dnf) have no fixed footer, so they don't
+   need the bottom padding reserved for it. */
+.session-screen--readonly {
+  padding-bottom: var(--space-4);
+}
+
+/* Header */
+
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.session-header__back {
+  flex-shrink: 0;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  line-height: 1;
+  color: var(--color-text);
+}
+
+.session-header__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.session-header__title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-header__meta {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.session-header__badge {
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  background: var(--color-surface-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.session-header__badge--completed {
+  color: var(--color-text-muted);
+}
+
+.session-header__badge--dnf {
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+}
+
+/* Item list */
+
+.session-screen__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Item card */
+
+.session-item-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.session-item-card--done {
+  opacity: 0.55;
+}
+
+.session-item-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.session-item-card__position {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.session-item-card__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.session-item-card__name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-item-card__summary {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.session-item-card__done-toggle {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  color: var(--color-accent-text);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.session-item-card__done-toggle[aria-pressed='true'] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.session-item-card__steppers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.session-item-card__steppers .stepper {
+  width: 100%;
+}
+
+.session-item-card__notes-toggle {
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-2);
+  text-align: left;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.session-item-card__notes-input {
+  width: 100%;
+  min-height: 72px;
+  padding: var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 14px;
+  resize: vertical;
+}
+
+.session-item-card__notes-readonly {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.session-item-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.session-item-card__reorder-btn,
+.session-item-card__remove-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  border-radius: var(--radius);
+}
+
+.session-item-card__remove-btn {
+  font-size: 18px;
+  color: var(--color-danger);
+}
+
+.session-item-card__confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.session-item-card__confirm-btn {
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  color: var(--color-danger);
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+}
+
+.session-item-card__cancel-btn {
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+/* Add exercise row */
+
+.add-exercise-row {
+  width: 100%;
+}
+
+/* Footer — pinned add-exercise + finish bar */
+
+.session-screen__footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Finish bar */
+
+.finish-bar {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.finish-bar__finish {
+  flex: 1;
+}
+
+.finish-bar__modal-body {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+}
+
+.finish-bar__modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
