@@ -1,16 +1,11 @@
 import { formatWeight } from '../../domain/units';
 import type { HistoryEntry } from '../../services/analytics-service';
+import { formatShortDate } from '../../utils/dates';
 import { EmptyState } from '../common/EmptyState';
 
 export type HistoryListProps = {
   entries: HistoryEntry[];
 };
-
-function formatShortDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const date = new Date(year as number, (month as number) - 1, day as number);
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
-}
 
 function formatSetLine(entry: HistoryEntry): string {
   const parts: string[] = [];

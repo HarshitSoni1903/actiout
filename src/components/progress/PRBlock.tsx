@@ -1,6 +1,7 @@
 import type { WeightUnit } from '../../domain/types';
 import { formatWeight } from '../../domain/units';
 import type { PRSummary } from '../../services/analytics-service';
+import { formatShortDate } from '../../utils/dates';
 
 export type PRBlockProps = {
   prs: PRSummary;
@@ -8,12 +9,6 @@ export type PRBlockProps = {
   includeDnf: boolean;
   onIncludeDnfChange(value: boolean): void;
 };
-
-function formatShortDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const date = new Date(year as number, (month as number) - 1, day as number);
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
-}
 
 export function PRBlock({ prs, unit, includeDnf, onIncludeDnfChange }: PRBlockProps) {
   return (

@@ -1,5 +1,6 @@
 import type { WeightUnit } from '../../domain/types';
 import { formatWeight } from '../../domain/units';
+import { formatShortDate } from '../../utils/dates';
 import { EmptyState } from '../common/EmptyState';
 
 export type BodyweightChartProps = {
@@ -13,11 +14,21 @@ const PADDING_X = 16;
 const PLOT_TOP = 28;
 const PLOT_BOTTOM = 140;
 const BASELINE_Y = PLOT_BOTTOM;
+// Point labels within this many SVG units of the left/right edge switch to a
+// start/end anchor (growing inward, away from the edge) instead of "middle"
+// (growing both ways), so labels on the first/last data point — the common
+// case for a steadily rising/falling trend — never render partially
+// offscreen.
+const EDGE_BAND = 50;
 
-function formatShortDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const date = new Date(year as number, (month as number) - 1, day as number);
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
+function edgeSafeAnchor(x: number): 'start' | 'middle' | 'end' {
+  if (x < EDGE_BAND) {
+    return 'start';
+  }
+  if (x > VIEW_W - EDGE_BAND) {
+    return 'end';
+  }
+  return 'middle';
 }
 
 export function BodyweightChart({ points, unit }: BodyweightChartProps) {
@@ -46,6 +57,9 @@ export function BodyweightChart({ points, unit }: BodyweightChartProps) {
   const lastIndex = coords.length - 1;
   const last = coords[lastIndex]!;
   const lastPoint = points[lastIndex]!;
+  // Min/max labels are redundant — and would sit on top of the last-value
+  // label — for a single entry or a flat series where every value ties.
+  const showMinMax = n > 1 && rawMin !== rawMax;
 
   const polylinePoints = coords.map((c) => `${c.x},${c.y}`).join(' ');
 
@@ -65,17 +79,29 @@ export function BodyweightChart({ points, unit }: BodyweightChartProps) {
         </circle>
       ))}
 
-      {minIndex !== maxIndex ? (
-        <text x={coords[minIndex]!.x} y={coords[minIndex]!.y + 14} textAnchor="middle" className="chart-caption">
-          min {formatWeight(rawMin, unit)}
-        </text>
+      {showMinMax ? (
+        <>
+          <text
+            x={coords[minIndex]!.x}
+            y={coords[minIndex]!.y + 14}
+            textAnchor={edgeSafeAnchor(coords[minIndex]!.x)}
+            className="chart-caption"
+          >
+            min {formatWeight(rawMin, unit)}
+          </text>
+          <text
+            x={coords[maxIndex]!.x}
+            y={coords[maxIndex]!.y - 8}
+            textAnchor={edgeSafeAnchor(coords[maxIndex]!.x)}
+            className="chart-caption"
+          >
+            max {formatWeight(rawMax, unit)}
+          </text>
+        </>
       ) : null}
-      <text x={coords[maxIndex]!.x} y={coords[maxIndex]!.y - 8} textAnchor="middle" className="chart-caption">
-        max {formatWeight(rawMax, unit)}
-      </text>
 
       <circle cx={last.x} cy={last.y} r={4} className="bodyweight-chart__marker" />
-      <text x={last.x} y={last.y - 14} textAnchor="end" className="bodyweight-chart__last-value">
+      <text x={last.x} y={last.y - 14} textAnchor={edgeSafeAnchor(last.x)} className="bodyweight-chart__last-value">
         {formatWeight(lastPoint.value, unit)}
       </text>
     </svg>

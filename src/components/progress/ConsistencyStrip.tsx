@@ -40,6 +40,12 @@ export function ConsistencyStrip({ byDate }: ConsistencyStripProps) {
   // exactly once.
   const days = Array.from({ length: WINDOW_DAYS }, (_, i) => localDateDaysAgo(WINDOW_DAYS - 1 - i));
 
+  // Deliberately derived here from `byDate` rather than consuming the
+  // service's own `getConsistency().byWeekday` (this component only takes
+  // `byDate`, per its prop contract). Equivalent as long as the caller
+  // queries the service with `days === WINDOW_DAYS` (84) — both sum
+  // completed-session counts over the identical last-84-day window grouped
+  // by weekday.
   const byWeekday = new Array<number>(ROWS).fill(0);
   for (const date of days) {
     const weekday = weekdayOf(date);

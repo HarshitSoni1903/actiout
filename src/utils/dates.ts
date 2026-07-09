@@ -32,3 +32,11 @@ export function localDateDaysAgo(n: number): string {
   date.setDate(date.getDate() - n);
   return formatLocalDate(date);
 }
+
+// "Jun 3" — short, no year, in the device locale. Parses local components
+// like weekdayOf (never `new Date(string)`, for the same UTC-shift reason).
+export function formatShortDate(localDate: string): string {
+  const [year, month, day] = localDate.split('-').map(Number);
+  const date = new Date(year as number, (month as number) - 1, day as number);
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
+}

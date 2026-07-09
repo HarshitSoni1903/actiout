@@ -11,6 +11,7 @@ import {
 import { deleteBodyweight, listBodyweight } from '../../services/bodyweight-service';
 import { getPreferences } from '../../services/preference-service';
 import { formatWeight } from '../../domain/units';
+import { formatShortDate } from '../../utils/dates';
 import { useUiStore } from '../../state/ui-store';
 import { SegmentedControl } from '../common/SegmentedControl';
 import type { SegmentedControlOption } from '../common/SegmentedControl';
@@ -32,12 +33,6 @@ const TAB_OPTIONS: SegmentedControlOption[] = [
 
 // Last 12 weeks, matching ConsistencyStrip's 7x12 grid.
 const CONSISTENCY_DAYS = 84;
-
-function formatShortDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const date = new Date(year as number, (month as number) - 1, day as number);
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
-}
 
 export function ProgressScreen() {
   const showToast = useUiStore((state) => state.showToast);
