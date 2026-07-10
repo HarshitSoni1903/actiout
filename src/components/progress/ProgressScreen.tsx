@@ -16,7 +16,7 @@ import { useUiStore } from '../../state/ui-store';
 import { SegmentedControl } from '../common/SegmentedControl';
 import type { SegmentedControlOption } from '../common/SegmentedControl';
 import { BodyweightChart } from './BodyweightChart';
-import { ConsistencyStrip } from './ConsistencyStrip';
+import { CONSISTENCY_DAYS, ConsistencyStrip } from './ConsistencyStrip';
 import { ExercisePicker } from './ExercisePicker';
 import { HistoryList } from './HistoryList';
 import { PRBlock } from './PRBlock';
@@ -30,9 +30,6 @@ const TAB_OPTIONS: SegmentedControlOption[] = [
   { value: 'body', label: 'Body' },
   { value: 'consistency', label: 'Consistency' },
 ];
-
-// Last 12 weeks, matching ConsistencyStrip's 7x12 grid.
-const CONSISTENCY_DAYS = 84;
 
 export function ProgressScreen() {
   const showToast = useUiStore((state) => state.showToast);
@@ -142,7 +139,7 @@ export function ProgressScreen() {
 
       {tab === 'consistency' ? (
         <div className="progress-screen__section">
-          <ConsistencyStrip byDate={consistency?.byDate ?? []} />
+          <ConsistencyStrip byDate={consistency?.byDate ?? []} days={CONSISTENCY_DAYS} />
         </div>
       ) : null}
     </div>

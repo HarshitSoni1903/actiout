@@ -43,7 +43,16 @@ export async function listBodyweight(database: ActiOutDB = db): Promise<Bodyweig
   });
 }
 
+// A missing id is a silent no-op (does not throw) and, per M1, logs no event
+// — without this existence check a double-clicked delete button (or any
+// delete of an already-gone id) would emit a phantom 'deleted' event for an
+// entity that never existed.
 export async function deleteBodyweight(id: string, database: ActiOutDB = db): Promise<void> {
+  const existing = await database.bodyweightEntries.get(id);
+  if (!existing) {
+    return;
+  }
+
   await database.bodyweightEntries.delete(id);
   await logEvent('bodyweight', id, 'deleted', undefined, database);
 }

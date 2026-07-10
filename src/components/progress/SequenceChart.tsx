@@ -37,6 +37,13 @@ export function SequenceChart({ stats, unit }: SequenceChartProps) {
   const n = stats.length;
   const available = VIEW_W - 2 * PADDING_X - (n - 1) * BAR_GAP;
   const barWidth = Math.min(MAX_BAR_WIDTH, Math.max(2, available / n));
+  // Self-consistent geometry (M6): once n is large enough that the 2px floor
+  // on barWidth kicks in (available / n < 2), n * barWidth + (n - 1) * BAR_GAP
+  // can exceed `available`, so the drawn bars would clip past a fixed
+  // viewBox's right edge. Widen the viewBox to the actual computed extent
+  // instead of letting content overflow it.
+  const contentWidth = n * barWidth + (n - 1) * BAR_GAP;
+  const viewW = Math.max(VIEW_W, contentWidth + 2 * PADDING_X);
 
   const maxIndex = stats.reduce((best, stat, index) => {
     if (stat.avgWeight === undefined) {
@@ -52,11 +59,11 @@ export function SequenceChart({ stats, unit }: SequenceChartProps) {
   return (
     <svg
       className="sequence-chart"
-      viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      viewBox={`0 0 ${viewW} ${VIEW_H}`}
       role="img"
       aria-label={`Average weight by set position for this exercise, in ${unit}`}
     >
-      <line x1={PADDING_X} y1={BASELINE_Y} x2={VIEW_W - PADDING_X} y2={BASELINE_Y} className="chart-axis" />
+      <line x1={PADDING_X} y1={BASELINE_Y} x2={viewW - PADDING_X} y2={BASELINE_Y} className="chart-axis" />
       {stats.map((stat, index) => {
         const x = PADDING_X + index * (barWidth + BAR_GAP);
         const height = stat.avgWeight !== undefined && maxWeight > 0 ? (stat.avgWeight / maxWeight) * plotHeight : 0;

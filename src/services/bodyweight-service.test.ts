@@ -85,6 +85,16 @@ describe('bodyweight-service (db-backed)', () => {
       await expect(deleteBodyweight('does-not-exist', testDb)).resolves.not.toThrow();
     });
 
+    it('logs no event when the id does not exist (M1)', async () => {
+      await deleteBodyweight('does-not-exist', testDb);
+
+      const events = await testDb.appEvents
+        .where('[entityType+entityId]')
+        .equals(['bodyweight', 'does-not-exist'])
+        .toArray();
+      expect(events).toHaveLength(0);
+    });
+
     it('logs a bodyweight "deleted" event', async () => {
       const entry = await addBodyweight(180, 'lb', undefined, undefined, testDb);
       await deleteBodyweight(entry.id, testDb);

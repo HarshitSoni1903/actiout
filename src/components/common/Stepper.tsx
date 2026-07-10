@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 
 export type StepperProps = {
@@ -22,25 +22,30 @@ export function Stepper({ value, onChange, step = 1, min, label, allowDecimal = 
   // point — back to a rounded echo mid-entry. Reverts to the prop on blur.
   const [draft, setDraft] = useState<string | null>(null);
 
+  // Leads the `value` prop so consecutive rapid taps compound instead of
+  // each recomputing from a still-stale prop (the prop only catches up after
+  // onChange -> IndexedDB write -> liveQuery round-trips back down, which
+  // routinely outlasts inter-tap intervals on mobile). Re-synced whenever the
+  // parent's committed value actually changes.
+  const latestRef = useRef<number | undefined>(value);
+  useEffect(() => {
+    latestRef.current = value;
+  }, [value]);
+
   const clamp = (n: number): number => (min !== undefined && n < min ? min : n);
 
-  const handleDecrement = () => {
-    const base = value ?? 0;
-    const next = clamp(round(base - step, allowDecimal));
+  const applyDelta = (dir: 1 | -1) => {
+    const base = latestRef.current ?? 0;
+    const next = clamp(round(base + dir * step, allowDecimal));
+    latestRef.current = next; // lead the prop; the next tap builds on this
     onChange(next);
     if (draft !== null) {
       setDraft(String(next));
     }
   };
 
-  const handleIncrement = () => {
-    const base = value ?? 0;
-    const next = clamp(round(base + step, allowDecimal));
-    onChange(next);
-    if (draft !== null) {
-      setDraft(String(next));
-    }
-  };
+  const handleDecrement = () => applyDelta(-1);
+  const handleIncrement = () => applyDelta(1);
 
   const handleFocus = () => {
     setDraft(value === undefined ? '' : String(value));
@@ -55,6 +60,7 @@ export function Stepper({ value, onChange, step = 1, min, label, allowDecimal = 
     setDraft(raw);
 
     if (raw.trim() === '') {
+      latestRef.current = undefined;
       onChange(undefined);
       return;
     }
@@ -64,7 +70,9 @@ export function Stepper({ value, onChange, step = 1, min, label, allowDecimal = 
       return;
     }
 
-    onChange(clamp(parsed));
+    const clamped = clamp(parsed);
+    latestRef.current = clamped;
+    onChange(clamped);
   };
 
   const displayValue = draft ?? (value === undefined ? '' : String(value));

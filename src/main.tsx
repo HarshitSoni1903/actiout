@@ -16,7 +16,15 @@ if (!rootElement) {
   throw new Error('Root element not found');
 }
 
-await initializeDb();
+// Never let a seeding failure produce a blank screen: a partially-seeded app
+// beats no app at all. initializeDb is concurrency-safe against its own
+// races (see db/seed.ts), but this is defense against any other unexpected
+// rejection.
+try {
+  await initializeDb();
+} catch (error) {
+  console.error('initializeDb failed; continuing with render anyway', error);
+}
 const preferences = await getPreferences();
 applyTheme(preferences.theme);
 

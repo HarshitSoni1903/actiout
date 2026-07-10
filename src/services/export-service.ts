@@ -87,8 +87,150 @@ export async function exportBundle(database: ActiOutDB = db): Promise<ExportBund
 
 export type ValidationResult = { ok: true; bundle: ExportBundleV1; summary: string } | { ok: false; reason: string };
 
-// Pure/synchronous structural check: formatVersion === 1, then all 10 table
-// fields present as arrays. Does not inspect row shapes beyond that.
+type FieldCheck = (v: unknown) => boolean;
+const isStr: FieldCheck = (v) => typeof v === 'string';
+const isNum: FieldCheck = (v) => typeof v === 'number' && Number.isFinite(v);
+const isBool: FieldCheck = (v) => typeof v === 'boolean';
+const oneOf =
+  (...allowed: readonly string[]): FieldCheck =>
+  (v) =>
+    typeof v === 'string' && allowed.includes(v);
+
+type TableField = (typeof TABLE_FIELDS)[number];
+
+// Child field -> parent table it must reference an existing id in. Only the
+// carve-outs the C1 fix explicitly enforces (see export-service.test.ts and
+// the final-review-fix brief) — sessionRoutineLinks.routineTemplateId and the
+// optional exerciseCatalogId fields legitimately dangle (routines are
+// hard-deleted while sessions keep name snapshots) and are deliberately NOT
+// checked here.
+type RefCheck = { field: string; parentTable: TableField };
+
+type TableSpec = {
+  fields: Record<string, FieldCheck>;
+  refs: RefCheck[];
+};
+
+// Required fields per table, derived from src/domain/types.ts + src/db/schema.ts.
+// Only required fields are validated; optional fields and unknown extra
+// fields are tolerated.
+const TABLE_SPECS: Record<TableField, TableSpec> = {
+  preferences: {
+    fields: {
+      id: isStr,
+      theme: oneOf('system', 'light', 'dark'),
+      weightUnit: oneOf('lb', 'kg'),
+      distanceUnit: oneOf('mi', 'km'),
+      defaultDraftConflictAction: oneOf('ask', 'resume', 'close-and-start-new'),
+      confirmBeforeReplacingDraft: isBool,
+    },
+    refs: [],
+  },
+  exerciseCatalog: {
+    fields: {
+      id: isStr,
+      canonicalName: isStr,
+      normalizedName: isStr,
+      isCustom: isBool,
+      createdAt: isStr,
+      updatedAt: isStr,
+    },
+    refs: [],
+  },
+  routineTemplates: {
+    fields: {
+      id: isStr,
+      name: isStr,
+      createdAt: isStr,
+      updatedAt: isStr,
+      isArchived: isBool,
+    },
+    refs: [],
+  },
+  routineTemplateDays: {
+    fields: {
+      id: isStr,
+      routineTemplateId: isStr,
+      weekday: isNum,
+    },
+    refs: [{ field: 'routineTemplateId', parentTable: 'routineTemplates' }],
+  },
+  routineTemplateItems: {
+    fields: {
+      id: isStr,
+      routineTemplateId: isStr,
+      exerciseNameSnapshot: isStr,
+      sequencePosition: isNum,
+      createdAt: isStr,
+      updatedAt: isStr,
+    },
+    refs: [{ field: 'routineTemplateId', parentTable: 'routineTemplates' }],
+  },
+  sessions: {
+    fields: {
+      id: isStr,
+      sessionDate: isStr,
+      status: oneOf('draft', 'completed', 'dnf'),
+      sourceMode: oneOf('routine', 'quick'),
+      createdAt: isStr,
+      updatedAt: isStr,
+    },
+    refs: [],
+  },
+  sessionRoutineLinks: {
+    fields: {
+      id: isStr,
+      sessionId: isStr,
+      routineTemplateId: isStr,
+      routineNameSnapshot: isStr,
+      sourceSequence: isNum,
+    },
+    refs: [{ field: 'sessionId', parentTable: 'sessions' }],
+  },
+  sessionItems: {
+    fields: {
+      id: isStr,
+      sessionId: isStr,
+      exerciseNameSnapshot: isStr,
+      sequencePosition: isNum,
+      weightUnit: oneOf('lb', 'kg'),
+      completed: isBool,
+      createdAt: isStr,
+      updatedAt: isStr,
+    },
+    refs: [{ field: 'sessionId', parentTable: 'sessions' }],
+  },
+  bodyweightEntries: {
+    fields: {
+      id: isStr,
+      entryDate: isStr,
+      weightValue: isNum,
+      weightUnit: oneOf('lb', 'kg'),
+      createdAt: isStr,
+      updatedAt: isStr,
+    },
+    refs: [],
+  },
+  appEvents: {
+    fields: {
+      id: isStr,
+      entityType: isStr,
+      entityId: isStr,
+      eventType: isStr,
+      payloadJson: isStr,
+      occurredAt: isStr,
+      createdAt: isStr,
+    },
+    refs: [],
+  },
+};
+
+// Structural + row-shape + referential-integrity check: formatVersion === 1,
+// all 10 table fields present as arrays, every row is a well-formed object
+// with its required fields, no duplicate primary keys within a table, and no
+// child row referencing a parent id absent from the bundle. Runs entirely
+// before importBundle touches the transaction, so a garbage bundle is
+// rejected before any existing data is cleared.
 export function validateBundle(data: unknown): ValidationResult {
   if (typeof data !== 'object' || data === null) {
     return { ok: false, reason: 'Bundle must be an object' };
@@ -106,18 +248,77 @@ export function validateBundle(data: unknown): ValidationResult {
     }
   }
 
+  // Row shape + duplicate-id checks, table by table. TABLE_FIELDS order also
+  // guarantees each parent table (routineTemplates, sessions) is checked
+  // before its children, so id sets are ready for the ref pass below.
+  const idsByTable = new Map<TableField, Set<string>>();
+
+  for (const table of TABLE_FIELDS) {
+    const rows = candidate[table] as unknown[];
+    const spec = TABLE_SPECS[table];
+    const ids = new Set<string>();
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i];
+      if (typeof row !== 'object' || row === null || Array.isArray(row)) {
+        return { ok: false, reason: `${table}[${i}] is not an object` };
+      }
+      const rowRecord = row as Record<string, unknown>;
+
+      for (const [field, check] of Object.entries(spec.fields)) {
+        if (!check(rowRecord[field])) {
+          return { ok: false, reason: `${table}[${i}]: missing or invalid "${field}"` };
+        }
+      }
+
+      const id = rowRecord.id as string;
+      if (ids.has(id)) {
+        return { ok: false, reason: `${table}: duplicate id "${id}"` };
+      }
+      ids.add(id);
+    }
+
+    idsByTable.set(table, ids);
+  }
+
+  for (const table of TABLE_FIELDS) {
+    const rows = candidate[table] as Array<Record<string, unknown>>;
+    const spec = TABLE_SPECS[table];
+
+    for (const ref of spec.refs) {
+      const parentIds = idsByTable.get(ref.parentTable) ?? new Set<string>();
+      for (let i = 0; i < rows.length; i += 1) {
+        const value = rows[i]![ref.field] as string;
+        if (!parentIds.has(value)) {
+          return {
+            ok: false,
+            reason: `${table}[${i}]: "${ref.field}" references unknown ${ref.parentTable} id "${value}"`,
+          };
+        }
+      }
+    }
+  }
+
   const bundle = candidate as unknown as ExportBundleV1;
   const summary = `${bundle.routineTemplates.length} routines, ${bundle.sessions.length} sessions, ${bundle.bodyweightEntries.length} bodyweight entries`;
 
   return { ok: true, bundle, summary };
 }
 
-// One rw transaction spanning all 10 tables: clears each, then bulkAdds the
-// bundle's rows. If any bulkAdd throws (e.g. duplicate primary keys within an
-// array), Dexie rolls back the entire transaction, so prior data is left
-// intact. The 'import' event is logged only after the transaction commits,
-// so a failed import never logs anything.
+// Re-validates (cheap insurance for callers that skip validateBundle, e.g.
+// importBundle is reachable directly via the dev window.__actiout hook), then
+// runs one rw transaction spanning all 10 tables: clears each, then bulkAdds
+// the bundle's rows. If any bulkAdd throws (e.g. duplicate primary keys
+// within an array not otherwise caught by validateBundle), Dexie rolls back
+// the entire transaction, so prior data is left intact. The 'import' event is
+// logged only after the transaction commits, so a failed import never logs
+// anything.
 export async function importBundle(bundle: ExportBundleV1, database: ActiOutDB = db): Promise<void> {
+  const result = validateBundle(bundle);
+  if (!result.ok) {
+    throw new Error(result.reason);
+  }
+
   const tables = TABLE_FIELDS.map((field) => database[field]);
 
   await database.transaction('rw', tables, async () => {

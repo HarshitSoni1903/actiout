@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ActiOutDB } from '../db/schema';
 import { initializeDb } from '../db/seed';
-import { KG_PER_LB, convertWeight } from '../domain/units';
+import { KG_PER_LB } from '../domain/units';
 import { localDateDaysAgo, nowIso, weekdayOf } from '../utils/dates';
 import { updatePreferences } from './preference-service';
 import {
@@ -93,7 +93,12 @@ describe('analytics-service', () => {
     it('reports the weight PR in the requested displayUnit (kg ~= 45.4)', async () => {
       await seedFixture();
       const prs = await getPRs('Bench Press', 'kg', undefined, testDb);
-      expect(prs.weight?.value).toBeCloseTo(100 * KG_PER_LB, 3); // ~45.359
+      // Hard-coded literal (not `100 * KG_PER_LB`, per I4): 100 lb -> kg is
+      // 45.359237. Computing the expectation with the same convertWeight the
+      // implementation calls would prove nothing — inverting convertWeight's
+      // direction would still pass. units.test.ts anchors convertWeight
+      // independently.
+      expect(prs.weight?.value).toBeCloseTo(45.359237, 3);
     });
 
     it('computes the volume PR = 3000 (3x10x100) in displayUnit', async () => {
@@ -116,6 +121,101 @@ describe('analytics-service', () => {
       expect(prs.weight).toBeUndefined();
       expect(prs.volume).toBeUndefined();
     });
+
+    it('on a tied weight, reports the earliest sessionDate regardless of iteration/primary-key order (I1)', async () => {
+      // Same weight (100 lb) hit twice, on two different dates. `matchingItems`
+      // iterates sessionItems.toArray(), which is primary-key order, not date
+      // order. Row ids are chosen so the LATER date's row sorts first — the
+      // old strict `>` comparison (first-row-wins on a tie) would report the
+      // later date here. The fix must report the earlier date regardless.
+      const earlierDate = localDateDaysAgo(10);
+      const laterDate = localDateDaysAgo(5);
+      const now = nowIso();
+
+      await testDb.sessions.bulkAdd([
+        { id: 'a-later', sessionDate: laterDate, status: 'completed', sourceMode: 'quick', createdAt: now, updatedAt: now },
+        { id: 'b-earlier', sessionDate: earlierDate, status: 'completed', sourceMode: 'quick', createdAt: now, updatedAt: now },
+      ]);
+
+      await testDb.sessionItems.bulkAdd([
+        {
+          id: 'item-a',
+          sessionId: 'a-later',
+          exerciseNameSnapshot: 'Deadlift',
+          sequencePosition: 1,
+          setsActual: 3,
+          repsActual: 10,
+          weightActual: 100,
+          weightUnit: 'lb',
+          completed: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: 'item-b',
+          sessionId: 'b-earlier',
+          exerciseNameSnapshot: 'Deadlift',
+          sequencePosition: 1,
+          setsActual: 3,
+          repsActual: 10,
+          weightActual: 100,
+          weightUnit: 'lb',
+          completed: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+
+      const prs = await getPRs('Deadlift', 'lb', undefined, testDb);
+      expect(prs.weight?.value).toBe(100);
+      expect(prs.weight?.date).toBe(earlierDate);
+    });
+
+    it('on a tied volume, reports the earliest sessionDate regardless of iteration/primary-key order (I1)', async () => {
+      // Same volume (3000 = 3x10x100) hit twice, on two different dates,
+      // with the same later-sorts-first id trick as the weight-PR test above.
+      const earlierDate = localDateDaysAgo(10);
+      const laterDate = localDateDaysAgo(5);
+      const now = nowIso();
+
+      await testDb.sessions.bulkAdd([
+        { id: 'a-later', sessionDate: laterDate, status: 'completed', sourceMode: 'quick', createdAt: now, updatedAt: now },
+        { id: 'b-earlier', sessionDate: earlierDate, status: 'completed', sourceMode: 'quick', createdAt: now, updatedAt: now },
+      ]);
+
+      await testDb.sessionItems.bulkAdd([
+        {
+          id: 'item-a',
+          sessionId: 'a-later',
+          exerciseNameSnapshot: 'Deadlift',
+          sequencePosition: 1,
+          setsActual: 3,
+          repsActual: 10,
+          weightActual: 100,
+          weightUnit: 'lb',
+          completed: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: 'item-b',
+          sessionId: 'b-earlier',
+          exerciseNameSnapshot: 'Deadlift',
+          sequencePosition: 1,
+          setsActual: 3,
+          repsActual: 10,
+          weightActual: 100,
+          weightUnit: 'lb',
+          completed: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+
+      const prs = await getPRs('Deadlift', 'lb', undefined, testDb);
+      expect(prs.volume?.value).toBeCloseTo(3000, 6);
+      expect(prs.volume?.date).toBe(earlierDate);
+    });
   });
 
   describe('getSequenceStats', () => {
@@ -125,7 +225,11 @@ describe('analytics-service', () => {
       expect(stats.map((s) => s.position)).toEqual([1, 2]);
 
       const [pos1, pos2] = stats;
-      const kgAsLb = convertWeight(40, 'kg', 'lb'); // ~88.185
+      // Hard-coded literal (not `convertWeight(40, 'kg', 'lb')`, per I4):
+      // 40 kg -> lb is 88.1849048740... (40 / 0.45359237). Deriving the
+      // expectation via the same conversion the implementation calls would
+      // be circular — units.test.ts anchors convertWeight independently.
+      const kgAsLb = 88.1849048740;
 
       expect(pos1!.count).toBe(2); // A(100 lb) + B(40 kg)
       expect(pos1!.avgWeight).toBeCloseTo((100 + kgAsLb) / 2, 3);

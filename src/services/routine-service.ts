@@ -234,6 +234,11 @@ export async function updateRoutine(
 
 // Hard delete: removes the template, its days, and its items. Sessions (and
 // their snapshots) are untouched, and the exercise catalog is never modified.
+// A missing id is a silent no-op (does not throw) and, per M1, logs no event
+// — Dexie's own `.delete()` is a no-op on a missing key, so without this
+// existence check a double-clicked delete button (or any delete of an
+// already-gone id) would emit a phantom 'deleted' event for an entity that
+// never existed.
 export async function deleteRoutine(id: string, database: ActiOutDB = db): Promise<void> {
   await database.transaction(
     'rw',
@@ -242,6 +247,11 @@ export async function deleteRoutine(id: string, database: ActiOutDB = db): Promi
     database.routineTemplateItems,
     database.appEvents,
     async () => {
+      const existing = await database.routineTemplates.get(id);
+      if (!existing) {
+        return;
+      }
+
       await database.routineTemplates.delete(id);
       await database.routineTemplateDays.where('routineTemplateId').equals(id).delete();
       await database.routineTemplateItems.where('routineTemplateId').equals(id).delete();

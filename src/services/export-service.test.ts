@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { BodyweightEntry } from '../domain/types';
 import { ActiOutDB } from '../db/schema';
 import { initializeDb } from '../db/seed';
+import { nowIso } from '../utils/dates';
 import { createRoutine, listRoutines, type RoutineInput } from './routine-service';
 import { completeSession, listSessions, startSession } from './session-service';
 import { addBodyweight, listBodyweight } from './bodyweight-service';
@@ -127,6 +129,125 @@ describe('export-service (db-backed)', () => {
       const badBundle = { ...bundle, sessions: 'not-an-array' };
       const result = validateBundle(badBundle);
       expect(result.ok).toBe(false);
+    });
+
+    it('rejects a session row missing "status", naming the table, index, and field (C1)', () => {
+      // The exact malformed-import scenario from the C1 finding: passes the
+      // old structure-only check (formatVersion ok, all fields arrays) but
+      // the one session row has no status, sessionDate, sourceMode, etc.
+      const badBundle = {
+        formatVersion: 1,
+        preferences: [],
+        exerciseCatalog: [],
+        routineTemplates: [],
+        routineTemplateDays: [],
+        routineTemplateItems: [],
+        sessions: [{ id: 'x' }],
+        sessionRoutineLinks: [],
+        sessionItems: [],
+        bodyweightEntries: [],
+        appEvents: [],
+      };
+      const result = validateBundle(badBundle);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        // The row is missing every required field, so whichever field the
+        // table-driven validator reaches first is reported; the important
+        // assertion is that the table and index are both named.
+        expect(result.reason).toContain('sessions[0]');
+        expect(result.reason).toMatch(/missing or invalid/);
+      }
+    });
+
+    it('rejects a sessionItems row whose sessionId matches no session (C1)', async () => {
+      const bundle = await exportBundle(testDb);
+      const badBundle: ExportBundleV1 = {
+        ...bundle,
+        sessionItems: [
+          {
+            id: crypto.randomUUID(),
+            sessionId: 'does-not-exist',
+            exerciseNameSnapshot: 'Bench Press',
+            sequencePosition: 1,
+            weightUnit: 'lb',
+            completed: false,
+            createdAt: nowIso(),
+            updatedAt: nowIso(),
+          },
+        ],
+      };
+      const result = validateBundle(badBundle);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toContain('sessionItems[0]');
+        expect(result.reason).toContain('sessionId');
+      }
+    });
+
+    it('rejects duplicate ids within a table (C1)', async () => {
+      const bundle = await exportBundle(testDb);
+      const dupEntry: BodyweightEntry = {
+        id: crypto.randomUUID(),
+        entryDate: '2026-01-01',
+        weightValue: 180,
+        weightUnit: 'lb',
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      const badBundle: ExportBundleV1 = {
+        ...bundle,
+        bodyweightEntries: [dupEntry, dupEntry],
+      };
+      const result = validateBundle(badBundle);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toContain('duplicate id');
+      }
+    });
+
+    it('accepts a bundle with a dangling sessionRoutineLinks.routineTemplateId (deleted-routine case) (C1)', async () => {
+      await createRoutine(pushInput(), testDb);
+      const session = await startSession([(await listRoutines(testDb))[0]!.id], undefined, testDb);
+      await completeSession(session.id, testDb);
+
+      const bundle = await exportBundle(testDb);
+      // Simulate the routine having been hard-deleted after the session
+      // referenced it (deleteRoutine removes the template, its days, and its
+      // items together): the link's routineTemplateId now dangles, but this
+      // must NOT be rejected — it's a legitimate real-world export shape.
+      const badBundle: ExportBundleV1 = {
+        ...bundle,
+        routineTemplates: [],
+        routineTemplateDays: [],
+        routineTemplateItems: [],
+      };
+
+      const result = validateBundle(badBundle);
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  describe('importBundle defensive re-validation (C1)', () => {
+    it('throws and leaves existing data intact when handed an invalid bundle directly, bypassing validateBundle', async () => {
+      await createRoutine(pushInput(), testDb);
+      const priorRoutines = await listRoutines(testDb);
+
+      const invalidBundle = {
+        formatVersion: 1,
+        preferences: [],
+        exerciseCatalog: [],
+        routineTemplates: [],
+        routineTemplateDays: [],
+        routineTemplateItems: [],
+        sessions: [{ id: 'x' }],
+        sessionRoutineLinks: [],
+        sessionItems: [],
+        bodyweightEntries: [],
+        appEvents: [],
+      } as unknown as ExportBundleV1;
+
+      await expect(importBundle(invalidBundle, testDb)).rejects.toThrow();
+      expect(await listRoutines(testDb)).toEqual(priorRoutines);
     });
   });
 

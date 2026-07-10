@@ -224,5 +224,15 @@ describe('routine-service (db-backed)', () => {
       const events = await testDb.appEvents.where('[entityType+entityId]').equals(['routine', created.id]).toArray();
       expect(events.map((e) => e.eventType)).toContain('deleted');
     });
+
+    it('logs no event and does not throw when the id does not exist (M1)', async () => {
+      await expect(deleteRoutine('does-not-exist', testDb)).resolves.not.toThrow();
+
+      const events = await testDb.appEvents
+        .where('[entityType+entityId]')
+        .equals(['routine', 'does-not-exist'])
+        .toArray();
+      expect(events).toHaveLength(0);
+    });
   });
 });

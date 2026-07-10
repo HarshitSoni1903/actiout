@@ -135,11 +135,42 @@ export async function getPRs(
   let weight: PRSummary['weight'];
   let volume: PRSummary['volume'];
 
+  // A PR means "first achieved": on an equal value, keep the earliest
+  // session.sessionDate rather than whichever row iteration (primary-key /
+  // insertion order, unrelated to date) happens to visit first. If the date
+  // also ties, break on the lexicographically smaller session id so the
+  // result is fully deterministic.
+  const isBetter = (
+    value: number,
+    session: SessionRow,
+    current: { value: number; date: string; sessionId: string } | undefined
+  ): boolean => {
+    if (!current) {
+      return true;
+    }
+    if (value > current.value) {
+      return true;
+    }
+    if (value < current.value) {
+      return false;
+    }
+    if (session.sessionDate < current.date) {
+      return true;
+    }
+    if (session.sessionDate > current.date) {
+      return false;
+    }
+    return session.id < current.sessionId;
+  };
+
+  let weightBest: { value: number; date: string; sessionId: string } | undefined;
+  let volumeBest: { value: number; date: string; sessionId: string } | undefined;
+
   for (const { item, session } of matched) {
     if (item.weightActual !== undefined) {
       const value = convertWeight(item.weightActual, item.weightUnit, displayUnit);
-      if (!weight || value > weight.value) {
-        weight = { value, date: session.sessionDate };
+      if (isBetter(value, session, weightBest)) {
+        weightBest = { value, date: session.sessionDate, sessionId: session.id };
       }
     }
 
@@ -147,11 +178,14 @@ export async function getPRs(
     if (vol !== undefined) {
       // Convert to displayUnit: volume scales linearly with weight.
       const value = convertWeight(vol, item.weightUnit, displayUnit);
-      if (!volume || value > volume.value) {
-        volume = { value, date: session.sessionDate };
+      if (isBetter(value, session, volumeBest)) {
+        volumeBest = { value, date: session.sessionDate, sessionId: session.id };
       }
     }
   }
+
+  weight = weightBest ? { value: weightBest.value, date: weightBest.date } : undefined;
+  volume = volumeBest ? { value: volumeBest.value, date: volumeBest.date } : undefined;
 
   return { weight, volume };
 }

@@ -49,6 +49,15 @@ describe('initializeDb', () => {
     expect(prefCount).toBe(1);
   });
 
+  it('is concurrency-safe: two overlapping calls resolve without a ConstraintError and seed exactly once (I2)', async () => {
+    await expect(Promise.all([initializeDb(testDb), initializeDb(testDb)])).resolves.toBeDefined();
+
+    const prefCount = await testDb.preferences.count();
+    const catalogCount = await testDb.exerciseCatalog.count();
+    expect(prefCount).toBe(1);
+    expect(catalogCount).toBe(40);
+  });
+
   it('produces unique, lowercased, single-spaced normalizedName values', async () => {
     await initializeDb(testDb);
     const entries = await testDb.exerciseCatalog.toArray();

@@ -3,9 +3,15 @@ import { EmptyState } from '../common/EmptyState';
 
 export type ConsistencyStripProps = {
   byDate: { date: string; completed: number }[];
+  days?: number;
 };
 
-const WINDOW_DAYS = 84;
+// Single source of truth for the window (M4): ProgressScreen imports this
+// same constant to query getConsistency() and to pass as this component's
+// `days` prop, instead of each side hand-maintaining its own copy that has
+// to be kept in sync manually.
+export const CONSISTENCY_DAYS = 84;
+
 const COLUMNS = 12;
 const ROWS = 7;
 const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -27,27 +33,26 @@ const BAR_MAX_HEIGHT = 32;
 const BAR_WIDTH = 16;
 const BAR_GAP = 8;
 
-export function ConsistencyStrip({ byDate }: ConsistencyStripProps) {
+export function ConsistencyStrip({ byDate, days = CONSISTENCY_DAYS }: ConsistencyStripProps) {
   if (byDate.length === 0) {
     return <EmptyState title="No sessions logged yet" description="Complete a workout to build your streak." />;
   }
 
   const completedByDate = new Map(byDate.map((entry) => [entry.date, entry.completed]));
 
-  // Chunking 84 consecutive days into 12 groups of 7, in chronological order,
-  // yields a valid 7-row (weekday) grid regardless of which weekday the
-  // window happens to start on — every 7-day chunk contains each weekday
+  // Chunking `days` consecutive days into 12 groups of 7, in chronological
+  // order, yields a valid 7-row (weekday) grid regardless of which weekday
+  // the window happens to start on — every 7-day chunk contains each weekday
   // exactly once.
-  const days = Array.from({ length: WINDOW_DAYS }, (_, i) => localDateDaysAgo(WINDOW_DAYS - 1 - i));
+  const dayList = Array.from({ length: days }, (_, i) => localDateDaysAgo(days - 1 - i));
 
   // Deliberately derived here from `byDate` rather than consuming the
   // service's own `getConsistency().byWeekday` (this component only takes
   // `byDate`, per its prop contract). Equivalent as long as the caller
-  // queries the service with `days === WINDOW_DAYS` (84) — both sum
-  // completed-session counts over the identical last-84-day window grouped
-  // by weekday.
+  // queries the service with the same `days` window as this prop — both sum
+  // completed-session counts over the identical window grouped by weekday.
   const byWeekday = new Array<number>(ROWS).fill(0);
-  for (const date of days) {
+  for (const date of dayList) {
     const weekday = weekdayOf(date);
     byWeekday[weekday] = (byWeekday[weekday] ?? 0) + (completedByDate.get(date) ?? 0);
   }
@@ -60,7 +65,7 @@ export function ConsistencyStrip({ byDate }: ConsistencyStripProps) {
       role="img"
       aria-label="Workout consistency over the last 12 weeks"
     >
-      {days.map((date, index) => {
+      {dayList.map((date, index) => {
         const column = Math.floor(index / ROWS);
         const row = weekdayOf(date);
         const completed = completedByDate.get(date) ?? 0;

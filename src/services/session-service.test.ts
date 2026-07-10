@@ -334,6 +334,20 @@ describe('session-service (db-backed)', () => {
       expect(updated.notes).toBe('PR');
       expect(updated.setsPlanned).toBe(5); // untouched
     });
+
+    it("bumps the parent session's updatedAt (M2)", async () => {
+      const push = await createRoutine(pushInput(), testDb);
+      const session = await startSession([push.id], undefined, testDb);
+      const item = session.items[0]!;
+
+      const before = (await testDb.sessions.get(session.id))!.updatedAt;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+
+      await updateSessionItem(item.id, { setsActual: 7 }, testDb);
+
+      const after = (await testDb.sessions.get(session.id))!.updatedAt;
+      expect(after > before).toBe(true);
+    });
   });
 
   describe('completeSession / dnfSession', () => {

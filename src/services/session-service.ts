@@ -209,12 +209,20 @@ export async function updateSessionItem(
   patch: Partial<Pick<SessionItem, 'setsActual' | 'repsActual' | 'weightActual' | 'notes' | 'completed'>>,
   database: ActiOutDB = db
 ): Promise<void> {
-  await database.transaction('rw', database.sessionItems, async () => {
+  await database.transaction('rw', database.sessionItems, database.sessions, async () => {
     const item = await database.sessionItems.get(itemId);
     if (!item) {
       throw new Error(`updateSessionItem: item ${itemId} does not exist`);
     }
-    await database.sessionItems.put({ ...item, ...patch, updatedAt: nowIso() });
+    const now = nowIso();
+    await database.sessionItems.put({ ...item, ...patch, updatedAt: now });
+
+    // Bump the parent session's updatedAt too (M2), so its modification
+    // time doesn't lie stale after an item edit.
+    const session = await database.sessions.get(item.sessionId);
+    if (session) {
+      await database.sessions.put({ ...session, updatedAt: now });
+    }
   });
 }
 

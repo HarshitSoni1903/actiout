@@ -55,6 +55,14 @@ export const STARTER_EXERCISES: ReadonlyArray<{ name: string; category: string }
 
 // Idempotent: safe to call on every app start. Detects prior seeding via the
 // 'default' preference row and skips re-seeding entirely if present.
+// Concurrency-safe: if two overlapping calls (e.g. two tabs both launching
+// cold) both miss the initial get, the duplicate 'default' primary key (and,
+// separately, the &normalizedName unique index on the catalog bulkAdd)
+// rejects the losing writer with a ConstraintError. We catch that and treat
+// it as "another caller already seeded" rather than propagating it — same
+// idiom as getPreferences (preference-service.ts) and ensureExercise
+// (exercise-service.ts). Deliberately uses `add`, never `put`, so a
+// concurrent double-seed can never overwrite a user's real preferences.
 export async function initializeDb(database: ActiOutDB = db): Promise<void> {
   const alreadySeeded = await database.preferences.get('default');
   if (alreadySeeded) {
@@ -63,26 +71,36 @@ export async function initializeDb(database: ActiOutDB = db): Promise<void> {
 
   const now = nowIso();
 
-  await database.transaction('rw', database.preferences, database.exerciseCatalog, async () => {
-    await database.preferences.add({
-      id: 'default',
-      theme: 'system',
-      weightUnit: 'lb',
-      distanceUnit: 'mi',
-      defaultDraftConflictAction: 'ask',
-      confirmBeforeReplacingDraft: true,
-    });
+  try {
+    await database.transaction('rw', database.preferences, database.exerciseCatalog, async () => {
+      await database.preferences.add({
+        id: 'default',
+        theme: 'system',
+        weightUnit: 'lb',
+        distanceUnit: 'mi',
+        defaultDraftConflictAction: 'ask',
+        confirmBeforeReplacingDraft: true,
+      });
 
-    await database.exerciseCatalog.bulkAdd(
-      STARTER_EXERCISES.map((entry) => ({
-        id: newId(),
-        canonicalName: entry.name,
-        normalizedName: normalizeExerciseName(entry.name),
-        category: entry.category,
-        isCustom: false,
-        createdAt: now,
-        updatedAt: now,
-      }))
-    );
-  });
+      await database.exerciseCatalog.bulkAdd(
+        STARTER_EXERCISES.map((entry) => ({
+          id: newId(),
+          canonicalName: entry.name,
+          normalizedName: normalizeExerciseName(entry.name),
+          category: entry.category,
+          isCustom: false,
+          createdAt: now,
+          updatedAt: now,
+        }))
+      );
+    });
+  } catch (error) {
+    // Lost a check-then-write race: another call seeded between our get and
+    // this transaction. Confirm the winner actually landed before swallowing
+    // the error; otherwise rethrow (a genuine failure, not a race).
+    const winner = await database.preferences.get('default');
+    if (!winner) {
+      throw error;
+    }
+  }
 }

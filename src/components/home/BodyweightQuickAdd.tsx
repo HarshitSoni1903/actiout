@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { WeightUnit } from '../../domain/types';
 import { convertWeight, formatWeight } from '../../domain/units';
+import { formatShortDate } from '../../utils/dates';
 import { Button } from '../common/Button';
 import { Stepper } from '../common/Stepper';
 
@@ -11,12 +12,6 @@ export type BodyweightQuickAddProps = {
   preferredUnit: WeightUnit;
   onSave(value: number): Promise<void> | void;
 };
-
-function formatShortDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const date = new Date(year as number, (month as number) - 1, day as number);
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
-}
 
 export function BodyweightQuickAdd({
   latestValue,
