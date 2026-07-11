@@ -4,6 +4,9 @@
 //   - SessionItem gains required `weightUnit: WeightUnit`, always stamped (D2)
 //   - ExerciseCatalogEntry gains `createdAt`/`updatedAt`
 //   - AppEvent added for the future sync abstraction
+//   - v2 (Task A1): per-set logging via SessionSet; SessionItem slimmed to
+//     planning fields only (setsActual/repsActual/weightActual/weightUnit/
+//     completed moved to SessionSet); Snapshot added for backup/restore.
 
 export type WeightUnit = 'lb' | 'kg';
 export type SessionStatus = 'draft' | 'completed' | 'dnf';
@@ -15,7 +18,6 @@ export type Preference = {
   weightUnit: WeightUnit;
   distanceUnit: 'mi' | 'km';
   defaultDraftConflictAction: DraftConflictAction;
-  confirmBeforeReplacingDraft: boolean;
 };
 
 export type ExerciseCatalogEntry = {
@@ -85,13 +87,23 @@ export type SessionItem = {
   sequencePosition: number;
   setsPlanned?: number;
   repsPlanned?: number;
-  setsActual?: number;
-  repsActual?: number;
-  weightActual?: number;
-  weightUnit: WeightUnit;
-  completed: boolean;
+  restSeconds?: number;
   notes?: string;
   fatigueGroup?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SessionSet = {
+  id: string;
+  sessionId: string;
+  sessionItemId: string;
+  setNumber: number;
+  reps?: number;
+  weight?: number;
+  weightUnit: WeightUnit;
+  isWarmup: boolean;
+  completed: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -114,4 +126,14 @@ export type AppEvent = {
   payloadJson: string;
   occurredAt: string;
   createdAt: string;
+};
+
+export type SnapshotReason = 'pre-import' | 'pre-restore' | 'pre-sync' | 'manual';
+
+export type Snapshot = {
+  id: string;
+  createdAt: string;
+  reason: SnapshotReason;
+  summary: string;
+  bundleJson: string;
 };

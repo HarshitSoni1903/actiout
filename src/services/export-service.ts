@@ -5,16 +5,18 @@ import type {
   Preference,
   SessionItem,
   SessionRoutineLink,
+  SessionSet,
 } from '../domain/types';
 import { ActiOutDB, db, type RoutineTemplateItemRow, type RoutineTemplateRow, type SessionRow } from '../db/schema';
 import { nowIso } from '../utils/dates';
 import { logEvent } from './events';
+import { takeSnapshot } from './snapshot-service';
 
 type RoutineTemplateDayRow = { id: string; routineTemplateId: string; weekday: number };
 type SessionRoutineLinkRow = SessionRoutineLink & { sessionId: string };
 
-export type ExportBundleV1 = {
-  formatVersion: 1;
+export type ExportBundleV2 = {
+  formatVersion: 2;
   exportedAt: string;
   preferences: Preference[];
   exerciseCatalog: ExerciseCatalogEntry[];
@@ -24,13 +26,15 @@ export type ExportBundleV1 = {
   sessions: SessionRow[];
   sessionRoutineLinks: SessionRoutineLinkRow[];
   sessionItems: SessionItem[];
+  sessionSets: SessionSet[];
   bodyweightEntries: BodyweightEntry[];
   appEvents: AppEvent[];
 };
 
-// Keys shared between ExportBundleV1's table arrays and ActiOutDB's table
+// Keys shared between ExportBundleV2's table arrays and ActiOutDB's table
 // properties, in a fixed order used for validation, transaction enrollment,
-// and the clear-then-bulkAdd import pass.
+// and the clear-then-bulkAdd import pass. `snapshots` is device-local and is
+// deliberately excluded, so a pre-import snapshot survives the import clear.
 const TABLE_FIELDS = [
   'preferences',
   'exerciseCatalog',
@@ -40,11 +44,12 @@ const TABLE_FIELDS = [
   'sessions',
   'sessionRoutineLinks',
   'sessionItems',
+  'sessionSets',
   'bodyweightEntries',
   'appEvents',
-] as const satisfies ReadonlyArray<keyof ExportBundleV1 & keyof ActiOutDB>;
+] as const satisfies ReadonlyArray<keyof ExportBundleV2 & keyof ActiOutDB>;
 
-export async function exportBundle(database: ActiOutDB = db): Promise<ExportBundleV1> {
+export async function exportBundle(database: ActiOutDB = db): Promise<ExportBundleV2> {
   const [
     preferences,
     exerciseCatalog,
@@ -54,6 +59,7 @@ export async function exportBundle(database: ActiOutDB = db): Promise<ExportBund
     sessions,
     sessionRoutineLinks,
     sessionItems,
+    sessionSets,
     bodyweightEntries,
     appEvents,
   ] = await Promise.all([
@@ -65,12 +71,13 @@ export async function exportBundle(database: ActiOutDB = db): Promise<ExportBund
     database.sessions.toArray(),
     database.sessionRoutineLinks.toArray(),
     database.sessionItems.toArray(),
+    database.sessionSets.toArray(),
     database.bodyweightEntries.toArray(),
     database.appEvents.toArray(),
   ]);
 
   return {
-    formatVersion: 1,
+    formatVersion: 2,
     exportedAt: nowIso(),
     preferences,
     exerciseCatalog,
@@ -80,12 +87,13 @@ export async function exportBundle(database: ActiOutDB = db): Promise<ExportBund
     sessions,
     sessionRoutineLinks,
     sessionItems,
+    sessionSets,
     bodyweightEntries,
     appEvents,
   };
 }
 
-export type ValidationResult = { ok: true; bundle: ExportBundleV1; summary: string } | { ok: false; reason: string };
+export type ValidationResult = { ok: true; bundle: ExportBundleV2; summary: string } | { ok: false; reason: string };
 
 type FieldCheck = (v: unknown) => boolean;
 const isStr: FieldCheck = (v) => typeof v === 'string';
@@ -122,7 +130,6 @@ const TABLE_SPECS: Record<TableField, TableSpec> = {
       weightUnit: oneOf('lb', 'kg'),
       distanceUnit: oneOf('mi', 'km'),
       defaultDraftConflictAction: oneOf('ask', 'resume', 'close-and-start-new'),
-      confirmBeforeReplacingDraft: isBool,
     },
     refs: [],
   },
@@ -143,7 +150,6 @@ const TABLE_SPECS: Record<TableField, TableSpec> = {
       name: isStr,
       createdAt: isStr,
       updatedAt: isStr,
-      isArchived: isBool,
     },
     refs: [],
   },
@@ -193,12 +199,29 @@ const TABLE_SPECS: Record<TableField, TableSpec> = {
       sessionId: isStr,
       exerciseNameSnapshot: isStr,
       sequencePosition: isNum,
-      weightUnit: oneOf('lb', 'kg'),
-      completed: isBool,
       createdAt: isStr,
       updatedAt: isStr,
     },
     refs: [{ field: 'sessionId', parentTable: 'sessions' }],
+  },
+  // reps/weight are optional (unlogged sets) and deliberately NOT validated.
+  // Both refs are required — a dangling sessionItemId must reject (no carve-out).
+  sessionSets: {
+    fields: {
+      id: isStr,
+      sessionId: isStr,
+      sessionItemId: isStr,
+      setNumber: isNum,
+      weightUnit: oneOf('lb', 'kg'),
+      isWarmup: isBool,
+      completed: isBool,
+      createdAt: isStr,
+      updatedAt: isStr,
+    },
+    refs: [
+      { field: 'sessionId', parentTable: 'sessions' },
+      { field: 'sessionItemId', parentTable: 'sessionItems' },
+    ],
   },
   bodyweightEntries: {
     fields: {
@@ -225,8 +248,8 @@ const TABLE_SPECS: Record<TableField, TableSpec> = {
   },
 };
 
-// Structural + row-shape + referential-integrity check: formatVersion === 1,
-// all 10 table fields present as arrays, every row is a well-formed object
+// Structural + row-shape + referential-integrity check: formatVersion === 2,
+// all table fields present as arrays, every row is a well-formed object
 // with its required fields, no duplicate primary keys within a table, and no
 // child row referencing a parent id absent from the bundle. Runs entirely
 // before importBundle touches the transaction, so a garbage bundle is
@@ -238,8 +261,8 @@ export function validateBundle(data: unknown): ValidationResult {
 
   const candidate = data as Record<string, unknown>;
 
-  if (candidate.formatVersion !== 1) {
-    return { ok: false, reason: `Unsupported formatVersion: ${JSON.stringify(candidate.formatVersion)} (expected 1)` };
+  if (candidate.formatVersion !== 2) {
+    return { ok: false, reason: `Unsupported formatVersion: ${JSON.stringify(candidate.formatVersion)} (expected 2)` };
   }
 
   for (const field of TABLE_FIELDS) {
@@ -299,7 +322,7 @@ export function validateBundle(data: unknown): ValidationResult {
     }
   }
 
-  const bundle = candidate as unknown as ExportBundleV1;
+  const bundle = candidate as unknown as ExportBundleV2;
   const summary = `${bundle.routineTemplates.length} routines, ${bundle.sessions.length} sessions, ${bundle.bodyweightEntries.length} bodyweight entries`;
 
   return { ok: true, bundle, summary };
@@ -313,11 +336,17 @@ export function validateBundle(data: unknown): ValidationResult {
 // the entire transaction, so prior data is left intact. The 'import' event is
 // logged only after the transaction commits, so a failed import never logs
 // anything.
-export async function importBundle(bundle: ExportBundleV1, database: ActiOutDB = db): Promise<void> {
+export async function importBundle(bundle: ExportBundleV2, database: ActiOutDB = db): Promise<void> {
+  // (1) Validate before touching anything — a garbage bundle must be rejected
+  // before any snapshot or clear happens.
   const result = validateBundle(bundle);
   if (!result.ok) {
     throw new Error(result.reason);
   }
+
+  // (2) Capture a pre-import snapshot. `snapshots` is not in TABLE_FIELDS, so
+  // it survives the clear pass below and remains available for restore.
+  await takeSnapshot('pre-import', database);
 
   const tables = TABLE_FIELDS.map((field) => database[field]);
 

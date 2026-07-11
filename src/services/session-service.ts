@@ -1,11 +1,10 @@
 import type { RoutineTemplate, Session, SessionItem, SessionRoutineLink, SessionStatus } from '../domain/types';
 import { ActiOutDB, db, type SessionRow } from '../db/schema';
-import { convertWeight } from '../domain/units';
 import { nowIso, todayLocalDate } from '../utils/dates';
 import { newId } from '../utils/ids';
 import { ensureExercise } from './exercise-service';
-import { getPreferences } from './preference-service';
 import { getRoutine } from './routine-service';
+import { isItemComplete } from './session-set-service';
 import { logEvent } from './events';
 
 // Thrown by start* when a draft session already exists (drafts are global and
@@ -78,11 +77,6 @@ async function createDraft(
   date: string | undefined,
   database: ActiOutDB
 ): Promise<Session> {
-  // Resolve out-of-transaction dependencies first (Dexie forbids touching
-  // tables not enrolled in the active transaction).
-  const preference = await getPreferences(database);
-  const prefUnit = preference.weightUnit;
-
   const now = nowIso();
   const sessionId = newId();
   const sessionDate = date ?? todayLocalDate();
@@ -103,17 +97,6 @@ async function createDraft(
 
     for (const item of routine.items) {
       position += 1;
-      const setsPlanned = item.defaultSets ?? routine.defaultSets;
-      const repsPlanned = item.defaultReps ?? routine.defaultReps;
-
-      let weightActual = item.defaultWeight;
-      if (weightActual !== undefined) {
-        const fromUnit = item.defaultWeightUnit ?? prefUnit;
-        if (fromUnit !== prefUnit) {
-          weightActual = convertWeight(weightActual, fromUnit, prefUnit);
-        }
-      }
-
       itemRows.push({
         id: newId(),
         sessionId,
@@ -121,13 +104,9 @@ async function createDraft(
         exerciseCatalogId: item.exerciseCatalogId,
         exerciseNameSnapshot: item.exerciseNameSnapshot,
         sequencePosition: position,
-        setsPlanned,
-        repsPlanned,
-        setsActual: setsPlanned,
-        repsActual: repsPlanned,
-        weightActual,
-        weightUnit: prefUnit,
-        completed: false,
+        setsPlanned: item.defaultSets ?? routine.defaultSets,
+        repsPlanned: item.defaultReps ?? routine.defaultReps,
+        restSeconds: item.restSeconds,
         createdAt: now,
         updatedAt: now,
       });
@@ -206,7 +185,7 @@ export async function startQuickSession(date?: string, database: ActiOutDB = db)
 
 export async function updateSessionItem(
   itemId: string,
-  patch: Partial<Pick<SessionItem, 'setsActual' | 'repsActual' | 'weightActual' | 'notes' | 'completed'>>,
+  patch: Pick<SessionItem, 'notes'>,
   database: ActiOutDB = db
 ): Promise<void> {
   await database.transaction('rw', database.sessionItems, database.sessions, async () => {
@@ -231,7 +210,7 @@ export async function moveSessionItem(
   direction: 'up' | 'down',
   database: ActiOutDB = db
 ): Promise<void> {
-  await database.transaction('rw', database.sessionItems, database.appEvents, async () => {
+  await database.transaction('rw', database.sessionItems, async () => {
     const item = await database.sessionItems.get(itemId);
     if (!item) {
       throw new Error(`moveSessionItem: item ${itemId} does not exist`);
@@ -255,8 +234,6 @@ export async function moveSessionItem(
 
     await database.sessionItems.put({ ...current, sequencePosition: neighbour.sequencePosition, updatedAt: now });
     await database.sessionItems.put({ ...neighbour, sequencePosition: current.sequencePosition, updatedAt: now });
-
-    await logEvent('session', item.sessionId, 'item-moved', { itemId, direction }, database);
   });
 }
 
@@ -266,15 +243,12 @@ export async function addSessionItem(
   database: ActiOutDB = db
 ): Promise<SessionItem> {
   // Resolve out-of-transaction dependencies first.
-  const [preference, catalogEntry] = await Promise.all([
-    getPreferences(database),
-    ensureExercise(exerciseName, database),
-  ]);
+  const catalogEntry = await ensureExercise(exerciseName, database);
 
   const now = nowIso();
   let created: SessionItem | undefined;
 
-  await database.transaction('rw', database.sessions, database.sessionItems, database.appEvents, async () => {
+  await database.transaction('rw', database.sessions, database.sessionItems, async () => {
     const session = await database.sessions.get(sessionId);
     if (!session) {
       throw new Error(`addSessionItem: session ${sessionId} does not exist`);
@@ -289,14 +263,11 @@ export async function addSessionItem(
       exerciseCatalogId: catalogEntry.id,
       exerciseNameSnapshot: catalogEntry.canonicalName,
       sequencePosition: maxPosition + 1,
-      weightUnit: preference.weightUnit,
-      completed: false,
       createdAt: now,
       updatedAt: now,
     };
 
     await database.sessionItems.add(item);
-    await logEvent('session', sessionId, 'item-added', { itemId: item.id, exercise: catalogEntry.canonicalName }, database);
     created = item;
   });
 
@@ -307,13 +278,14 @@ export async function addSessionItem(
 }
 
 export async function removeSessionItem(itemId: string, database: ActiOutDB = db): Promise<void> {
-  await database.transaction('rw', database.sessionItems, database.appEvents, async () => {
+  await database.transaction('rw', database.sessionItems, database.sessionSets, async () => {
     const item = await database.sessionItems.get(itemId);
     if (!item) {
       throw new Error(`removeSessionItem: item ${itemId} does not exist`);
     }
 
     await database.sessionItems.delete(itemId);
+    await database.sessionSets.where('sessionItemId').equals(itemId).delete();
 
     // Renumber the remaining items contiguously 1..n, preserving order.
     const remaining = (await database.sessionItems.where('sessionId').equals(item.sessionId).toArray()).sort(
@@ -327,8 +299,6 @@ export async function removeSessionItem(itemId: string, database: ActiOutDB = db
         await database.sessionItems.put({ ...row, sequencePosition: expected, updatedAt: now });
       }
     }
-
-    await logEvent('session', item.sessionId, 'item-removed', { itemId }, database);
   });
 }
 
@@ -338,7 +308,13 @@ async function finishSession(
   eventType: 'completed' | 'dnf',
   database: ActiOutDB
 ): Promise<void> {
-  await database.transaction('rw', database.sessions, database.appEvents, async () => {
+  await database.transaction(
+    'rw',
+    database.sessions,
+    database.sessionItems,
+    database.sessionSets,
+    database.appEvents,
+    async () => {
     const session = await database.sessions.get(id);
     if (!session) {
       throw new Error(`${eventType}Session: session ${id} does not exist`);
@@ -347,13 +323,68 @@ async function finishSession(
       throw new Error(`${eventType}Session: session ${id} is not a draft (status: ${session.status})`);
     }
 
+    // Completion (not DNF) requires derived state: at least one item whose
+    // work sets are all completed.
+    if (status === 'completed') {
+      const items = await database.sessionItems.where('sessionId').equals(id).toArray();
+      let anyComplete = false;
+      for (const item of items) {
+        const sets = await database.sessionSets.where('sessionItemId').equals(item.id).toArray();
+        if (isItemComplete(sets)) {
+          anyComplete = true;
+          break;
+        }
+      }
+      if (!anyComplete) {
+        throw new Error(`completeSession: session ${id} has no completed items`);
+      }
+    }
+
     const endedAt = nowIso();
     const startedMs = session.startedAt ? Date.parse(session.startedAt) : Date.parse(endedAt);
     const durationSeconds = Math.round((Date.parse(endedAt) - startedMs) / 1000);
 
     await database.sessions.put({ ...session, status, endedAt, durationSeconds, updatedAt: endedAt });
     await logEvent('session', id, eventType, { durationSeconds }, database);
-  });
+    }
+  );
+}
+
+// Cascade-deletes a session and all its children (links, items, sets) in one
+// transaction, then logs a 'deleted' event. Throws on a missing id so a stray
+// delete of an already-gone session emits no phantom event (INV-8).
+export async function deleteSession(id: string, database: ActiOutDB = db): Promise<void> {
+  await database.transaction(
+    'rw',
+    database.sessions,
+    database.sessionRoutineLinks,
+    database.sessionItems,
+    database.sessionSets,
+    database.appEvents,
+    async () => {
+      const session = await database.sessions.get(id);
+      if (!session) {
+        throw new Error(`deleteSession: session ${id} does not exist`);
+      }
+
+      await database.sessionRoutineLinks.where('sessionId').equals(id).delete();
+      await database.sessionItems.where('sessionId').equals(id).delete();
+      await database.sessionSets.where('sessionId').equals(id).delete();
+      await database.sessions.delete(id);
+
+      await logEvent('session', id, 'deleted', { status: session.status }, database);
+    }
+  );
+}
+
+// Validated entry point for the UI "Edit" affordance on a finished session.
+// Mutation of completed/dnf sessions is now intended, so there is no status
+// change to make — this only asserts the session exists and returns.
+export async function unlockSession(id: string, database: ActiOutDB = db): Promise<void> {
+  const session = await database.sessions.get(id);
+  if (!session) {
+    throw new Error(`unlockSession: session ${id} does not exist`);
+  }
 }
 
 export async function completeSession(id: string, database: ActiOutDB = db): Promise<void> {

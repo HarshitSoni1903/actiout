@@ -22,7 +22,6 @@ export function DraftCard({ draft, onResume, onMarkDnf }: DraftCardProps) {
     draft.routineLinks.length > 0
       ? draft.routineLinks.map((link) => link.routineNameSnapshot).join(', ')
       : 'Quick session';
-  const completedCount = draft.items.filter((item) => item.completed).length;
   const total = draft.items.length;
 
   return (
@@ -30,7 +29,7 @@ export function DraftCard({ draft, onResume, onMarkDnf }: DraftCardProps) {
       <p className="draft-card__title">{routineNames}</p>
       <p className="draft-card__meta">
         Started {formatStartedTime(draft.startedAt)}
-        {total > 0 ? ` · ${completedCount}/${total} done` : ''}
+        {total > 0 ? ` · ${total} exercises` : ''}
       </p>
 
       {confirmingDnf ? (

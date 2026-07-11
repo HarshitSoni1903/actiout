@@ -8,18 +8,11 @@ export type HistoryListProps = {
 };
 
 function formatSetLine(entry: HistoryEntry): string {
-  const parts: string[] = [];
-  if (entry.sets !== undefined && entry.reps !== undefined) {
-    parts.push(`${entry.sets}×${entry.reps}`);
-  } else if (entry.sets !== undefined) {
-    parts.push(`${entry.sets} sets`);
-  } else if (entry.reps !== undefined) {
-    parts.push(`${entry.reps} reps`);
+  if (entry.setCount === 0) {
+    return 'No sets logged';
   }
-  if (entry.weight !== undefined) {
-    parts.push(`@ ${formatWeight(entry.weight, entry.weightUnit)}`);
-  }
-  return parts.length > 0 ? parts.join(' ') : 'No data logged';
+  const top = entry.topSet !== undefined ? formatWeight(entry.topSet, entry.weightUnit) : '—';
+  return `${entry.setCount} sets · ${entry.totalReps ?? 0} reps · top ${top} · vol ${Math.round(entry.totalVolume ?? 0)}`;
 }
 
 export function HistoryList({ entries }: HistoryListProps) {

@@ -7,6 +7,7 @@ import * as preferenceService from './services/preference-service';
 import { getPreferences } from './services/preference-service';
 import * as routineService from './services/routine-service';
 import * as sessionService from './services/session-service';
+import { requestPersistentStorage } from './utils/storage';
 import { router } from './app/routes';
 import { applyTheme } from './app/theme';
 import './app/styles/global.css';
@@ -27,6 +28,15 @@ try {
 }
 const preferences = await getPreferences();
 applyTheme(preferences.theme);
+
+// Request persistent storage durability (fire-and-forget; guarded against SSR).
+if (typeof navigator !== 'undefined') {
+  requestPersistentStorage().then((granted) => {
+    console.info(
+      `Persistent storage ${granted ? 'granted' : 'denied'}; IndexedDB may be evicted when storage quota is exceeded.`
+    );
+  });
+}
 
 // Dev-only escape hatch: expose the service layer on window so it can be
 // driven from the browser console during manual verification (seeding

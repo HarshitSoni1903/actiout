@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { DraftConflictAction, Preference } from '../../domain/types';
 import { getPreferences, updatePreferences } from '../../services/preference-service';
 import { exportBundle, importBundle, validateBundle } from '../../services/export-service';
-import type { ExportBundleV1 } from '../../services/export-service';
+import type { ExportBundleV2 } from '../../services/export-service';
+import { listSnapshots, restoreSnapshot } from '../../services/snapshot-service';
+import { getStoragePersisted } from '../../utils/storage';
 import { todayLocalDate } from '../../utils/dates';
 import { useUiStore } from '../../state/ui-store';
 import { Field } from '../common/Field';
@@ -40,13 +42,20 @@ const DRAFT_CONFLICT_OPTIONS: SegmentedControlOption[] = [
   { value: 'close-and-start-new', label: 'Close & start new' },
 ];
 
-type PendingImport = { bundle: ExportBundleV1; summary: string };
+type PendingImport = { bundle: ExportBundleV2; summary: string };
 
 export function SettingsScreen() {
   const showToast = useUiStore((state) => state.showToast);
   const preferences = useLiveQuery(() => getPreferences(), []);
+  const snapshots = useLiveQuery(() => listSnapshots(), []);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
+  const [pendingRestoreId, setPendingRestoreId] = useState<string | null>(null);
+  const [storagePersisted, setStoragePersisted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    void getStoragePersisted().then(setStoragePersisted);
+  }, []);
 
   async function handleExport() {
     try {
@@ -115,6 +124,20 @@ export function SettingsScreen() {
     }
   }
 
+  async function handleConfirmRestore() {
+    if (!pendingRestoreId) {
+      return;
+    }
+    try {
+      await restoreSnapshot(pendingRestoreId);
+      showToast('Snapshot restored.');
+    } catch {
+      showToast('Could not restore snapshot.', 'error');
+    } finally {
+      setPendingRestoreId(null);
+    }
+  }
+
   if (!preferences) {
     return null;
   }
@@ -172,6 +195,29 @@ export function SettingsScreen() {
         />
       </Field>
 
+      <Field label="Restore from snapshot" hint="Automatic backups taken before imports and restores">
+        {snapshots === undefined ? null : snapshots.length === 0 ? (
+          <p className="settings-screen__snapshots-empty">No snapshots yet</p>
+        ) : (
+          <ul className="settings-screen__snapshots">
+            {snapshots.map((snapshot) => (
+              <li key={snapshot.id} className="settings-screen__snapshot-row">
+                <span>
+                  {snapshot.createdAt} · {snapshot.reason} · {snapshot.summary}
+                </span>
+                <Button variant="ghost" onClick={() => setPendingRestoreId(snapshot.id)}>
+                  Restore
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Field>
+
+      <p className="settings-screen__footer">
+        Storage: {storagePersisted === null ? '…' : storagePersisted ? 'persisted' : 'best-effort (may be evicted)'}
+      </p>
+
       <p className="settings-screen__footer">ActiOut {APP_VERSION}</p>
 
       <ImportConfirmModal
@@ -179,6 +225,13 @@ export function SettingsScreen() {
         summary={pendingImport?.summary ?? ''}
         onConfirm={() => void handleConfirmImport()}
         onCancel={() => setPendingImport(null)}
+      />
+
+      <ImportConfirmModal
+        open={pendingRestoreId !== null}
+        summary={snapshots?.find((s) => s.id === pendingRestoreId)?.summary ?? ''}
+        onConfirm={() => void handleConfirmRestore()}
+        onCancel={() => setPendingRestoreId(null)}
       />
     </div>
   );

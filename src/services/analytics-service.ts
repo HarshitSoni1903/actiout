@@ -1,19 +1,22 @@
-import type { SessionItem, SessionStatus, WeightUnit } from '../domain/types';
+import type { SessionItem, SessionSet, SessionStatus, WeightUnit } from '../domain/types';
 import { ActiOutDB, db, type SessionRow } from '../db/schema';
 import { convertWeight } from '../domain/units';
 import { localDateDaysAgo, weekdayOf } from '../utils/dates';
 import { normalizeExerciseName } from './exercise-service';
 
+// Per-item summary computed from that item's non-warmup, completed ("working")
+// sets. topSet/totalReps/totalVolume are expressed in the first working set's
+// own weightUnit, UNCONVERTED — consumers convert later.
 export type HistoryEntry = {
   sessionId: string;
   date: string;
   status: SessionStatus;
   position: number;
-  sets?: number;
-  reps?: number;
-  weight?: number;
+  topSet?: number;
+  totalReps?: number;
+  totalVolume?: number;
+  setCount: number;
   weightUnit: WeightUnit;
-  volume?: number;
 };
 
 // Values expressed in the caller's requested displayUnit.
@@ -30,13 +33,11 @@ export type SequenceStat = {
   count: number;
 };
 
-// volume is meaningful only when sets, reps, and weight are all present.
-// Returned in the row's own weightUnit (weight is not converted here).
-function rowVolume(item: SessionItem): number | undefined {
-  if (item.setsActual === undefined || item.repsActual === undefined || item.weightActual === undefined) {
-    return undefined;
-  }
-  return item.setsActual * item.repsActual * item.weightActual;
+// A "working set" is a non-warmup set that was actually completed (INV-7 warmup
+// exclusion; completed-only = actual logged work). Volume, PRs, history, and
+// last-performance are all computed from these.
+function workingSets(sets: SessionSet[]): SessionSet[] {
+  return sets.filter((s) => !s.isWarmup && s.completed);
 }
 
 // Loads the session items whose exercise matches `name` (via canonical
@@ -74,6 +75,33 @@ async function matchingItems(
   return result;
 }
 
+// As matchingItems, but joins each item to all of its SessionSet rows (raw —
+// each consumer filters to working sets as needed).
+async function matchingItemsWithSets(
+  name: string,
+  includeDnf: boolean,
+  database: ActiOutDB
+): Promise<Array<{ item: SessionItem; session: SessionRow; sets: SessionSet[] }>> {
+  const base = await matchingItems(name, includeDnf, database);
+  if (base.length === 0) {
+    return [];
+  }
+
+  const itemIds = base.map((b) => b.item.id);
+  const allSets = await database.sessionSets.where('sessionItemId').anyOf(itemIds).toArray();
+  const byItem = new Map<string, SessionSet[]>();
+  for (const set of allSets) {
+    const bucket = byItem.get(set.sessionItemId);
+    if (bucket) {
+      bucket.push(set);
+    } else {
+      byItem.set(set.sessionItemId, [set]);
+    }
+  }
+
+  return base.map(({ item, session }) => ({ item, session, sets: byItem.get(item.id) ?? [] }));
+}
+
 // Distinct exercise-name snapshots across all non-draft sessions, sorted.
 // Draft sessions are never counted (per the analytics semantics).
 export async function getLoggedExerciseNames(database: ActiOutDB = db): Promise<string[]> {
@@ -92,26 +120,41 @@ export async function getLoggedExerciseNames(database: ActiOutDB = db): Promise<
   return [...names].sort((a, b) => a.localeCompare(b));
 }
 
-// Per-item history, newest date first (ties broken by ascending position for a
-// stable order). Weight/volume are reported in each row's own unit.
+// Per-item history summarized over the item's working sets, newest date first
+// (ties broken by ascending position for a stable order). topSet/totalReps/
+// totalVolume are in the first working set's own unit, UNCONVERTED.
 export async function getExerciseHistory(
   name: string,
   includeDnf: boolean = false,
   database: ActiOutDB = db
 ): Promise<HistoryEntry[]> {
-  const matched = await matchingItems(name, includeDnf, database);
+  const matched = await matchingItemsWithSets(name, includeDnf, database);
 
-  const entries: HistoryEntry[] = matched.map(({ item, session }) => ({
-    sessionId: item.sessionId,
-    date: session.sessionDate,
-    status: session.status,
-    position: item.sequencePosition,
-    sets: item.setsActual,
-    reps: item.repsActual,
-    weight: item.weightActual,
-    weightUnit: item.weightUnit,
-    volume: rowVolume(item),
-  }));
+  const entries: HistoryEntry[] = matched.map(({ item, session, sets }) => {
+    const work = workingSets(sets).sort((a, b) => a.setNumber - b.setNumber);
+    const weights = work.filter((s) => s.weight !== undefined).map((s) => s.weight as number);
+
+    const summary =
+      work.length === 0
+        ? { topSet: undefined, totalReps: undefined, totalVolume: undefined }
+        : {
+            topSet: weights.length > 0 ? Math.max(...weights) : undefined,
+            totalReps: work.reduce((sum, s) => sum + (s.reps ?? 0), 0),
+            totalVolume: work.reduce((sum, s) => sum + (s.reps ?? 0) * (s.weight ?? 0), 0),
+          };
+
+    return {
+      sessionId: item.sessionId,
+      date: session.sessionDate,
+      status: session.status,
+      position: item.sequencePosition,
+      topSet: summary.topSet,
+      totalReps: summary.totalReps,
+      totalVolume: summary.totalVolume,
+      setCount: work.length,
+      weightUnit: work[0]?.weightUnit ?? sets[0]?.weightUnit ?? 'lb',
+    };
+  });
 
   entries.sort((a, b) => {
     if (a.date !== b.date) {
@@ -122,15 +165,17 @@ export async function getExerciseHistory(
   return entries;
 }
 
-// Best weight and best volume, each converted per-row into displayUnit before
-// comparison. Absent when no qualifying rows exist.
+// Weight PR = heaviest single working set (converted to displayUnit). Volume PR
+// = best per-session total working-set volume (each set converted before
+// summing, since units can differ within a session). Absent when no qualifying
+// sets exist.
 export async function getPRs(
   name: string,
   displayUnit: WeightUnit,
   includeDnf: boolean = false,
   database: ActiOutDB = db
 ): Promise<PRSummary> {
-  const matched = await matchingItems(name, includeDnf, database);
+  const matched = await matchingItemsWithSets(name, includeDnf, database);
 
   let weight: PRSummary['weight'];
   let volume: PRSummary['volume'];
@@ -166,21 +211,37 @@ export async function getPRs(
   let weightBest: { value: number; date: string; sessionId: string } | undefined;
   let volumeBest: { value: number; date: string; sessionId: string } | undefined;
 
-  for (const { item, session } of matched) {
-    if (item.weightActual !== undefined) {
-      const value = convertWeight(item.weightActual, item.weightUnit, displayUnit);
-      if (isBetter(value, session, weightBest)) {
-        weightBest = { value, date: session.sessionDate, sessionId: session.id };
+  // Accumulate per-session volume across every matching item in that session.
+  const sessionVolumes = new Map<string, { session: SessionRow; volume: number; has: boolean }>();
+
+  for (const { session, sets } of matched) {
+    const work = workingSets(sets);
+
+    for (const set of work) {
+      if (set.weight !== undefined) {
+        const value = convertWeight(set.weight, set.weightUnit, displayUnit);
+        if (isBetter(value, session, weightBest)) {
+          weightBest = { value, date: session.sessionDate, sessionId: session.id };
+        }
       }
     }
 
-    const vol = rowVolume(item);
-    if (vol !== undefined) {
-      // Convert to displayUnit: volume scales linearly with weight.
-      const value = convertWeight(vol, item.weightUnit, displayUnit);
-      if (isBetter(value, session, volumeBest)) {
-        volumeBest = { value, date: session.sessionDate, sessionId: session.id };
+    let acc = sessionVolumes.get(session.id);
+    if (!acc) {
+      acc = { session, volume: 0, has: false };
+      sessionVolumes.set(session.id, acc);
+    }
+    for (const set of work) {
+      if (set.reps !== undefined && set.weight !== undefined) {
+        acc.volume += convertWeight(set.reps * set.weight, set.weightUnit, displayUnit);
+        acc.has = true;
       }
+    }
+  }
+
+  for (const { session, volume: vol, has } of sessionVolumes.values()) {
+    if (has && isBetter(vol, session, volumeBest)) {
+      volumeBest = { value: vol, date: session.sessionDate, sessionId: session.id };
     }
   }
 
@@ -190,32 +251,47 @@ export async function getPRs(
   return { weight, volume };
 }
 
-// Average weight/volume grouped by sequence position, converted per-row into
-// displayUnit before averaging. Rows with undefined weight are excluded from
-// avgWeight (and undefined volume from avgVolume) but still counted.
+// Averages grouped by the item's sequence position. avgWeight = mean of all
+// working-set weights (converted); avgVolume = mean of per-session total working
+// volumes at that position; count = distinct sessions at that position.
 export async function getSequenceStats(
   name: string,
   displayUnit: WeightUnit,
   includeDnf: boolean = false,
   database: ActiOutDB = db
 ): Promise<SequenceStat[]> {
-  const matched = await matchingItems(name, includeDnf, database);
+  const matched = await matchingItemsWithSets(name, includeDnf, database);
 
-  const buckets = new Map<number, { weights: number[]; volumes: number[]; count: number }>();
-  for (const { item } of matched) {
+  const buckets = new Map<
+    number,
+    { weights: number[]; sessionVolumes: Map<string, { volume: number; has: boolean }>; sessions: Set<string> }
+  >();
+
+  for (const { item, session, sets } of matched) {
     let bucket = buckets.get(item.sequencePosition);
     if (!bucket) {
-      bucket = { weights: [], volumes: [], count: 0 };
+      bucket = { weights: [], sessionVolumes: new Map(), sessions: new Set() };
       buckets.set(item.sequencePosition, bucket);
     }
-    bucket.count += 1;
+    bucket.sessions.add(session.id);
 
-    if (item.weightActual !== undefined) {
-      bucket.weights.push(convertWeight(item.weightActual, item.weightUnit, displayUnit));
+    const work = workingSets(sets);
+    for (const set of work) {
+      if (set.weight !== undefined) {
+        bucket.weights.push(convertWeight(set.weight, set.weightUnit, displayUnit));
+      }
     }
-    const vol = rowVolume(item);
-    if (vol !== undefined) {
-      bucket.volumes.push(convertWeight(vol, item.weightUnit, displayUnit));
+
+    let acc = bucket.sessionVolumes.get(session.id);
+    if (!acc) {
+      acc = { volume: 0, has: false };
+      bucket.sessionVolumes.set(session.id, acc);
+    }
+    for (const set of work) {
+      if (set.reps !== undefined && set.weight !== undefined) {
+        acc.volume += convertWeight(set.reps * set.weight, set.weightUnit, displayUnit);
+        acc.has = true;
+      }
     }
   }
 
@@ -223,13 +299,65 @@ export async function getSequenceStats(
     values.length === 0 ? undefined : values.reduce((a, b) => a + b, 0) / values.length;
 
   return [...buckets.entries()]
-    .map(([position, bucket]) => ({
-      position,
-      avgWeight: mean(bucket.weights),
-      avgVolume: mean(bucket.volumes),
-      count: bucket.count,
-    }))
+    .map(([position, bucket]) => {
+      const volumes = [...bucket.sessionVolumes.values()].filter((v) => v.has).map((v) => v.volume);
+      return {
+        position,
+        avgWeight: mean(bucket.weights),
+        avgVolume: mean(volumes),
+        count: bucket.sessions.size,
+      };
+    })
     .sort((a, b) => a.position - b.position);
+}
+
+// The most recent completed session's working sets for the exercise (matched by
+// normalized name), by descending sessionDate then descending createdAt. Sets
+// are sorted by setNumber and reported in their own stored unit. undefined when
+// no completed history exists.
+export async function getLastPerformance(
+  name: string,
+  database: ActiOutDB = db
+): Promise<
+  { date: string; sets: Array<{ setNumber: number; reps?: number; weight?: number; weightUnit: WeightUnit }> } | undefined
+> {
+  const matched = await matchingItemsWithSets(name, false, database);
+  // Only candidates with at least one working set are eligible — an item that
+  // was only warmups (or wasn't the item that satisfied completeSession's
+  // ≥1-complete-item rule) must not shadow a real earlier performance.
+  const withWork = matched.filter((c) => workingSets(c.sets).length > 0);
+  if (withWork.length === 0) {
+    return undefined;
+  }
+
+  let best: { item: SessionItem; session: SessionRow; sets: SessionSet[] } | undefined;
+  for (const candidate of withWork) {
+    if (!best) {
+      best = candidate;
+      continue;
+    }
+    const c = candidate.session;
+    const b = best.session;
+    if (c.sessionDate > b.sessionDate) {
+      best = candidate;
+    } else if (c.sessionDate === b.sessionDate) {
+      if (c.createdAt > b.createdAt) {
+        best = candidate;
+      } else if (c.createdAt === b.createdAt && candidate.item.sequencePosition < best.item.sequencePosition) {
+        best = candidate;
+      }
+    }
+  }
+
+  if (!best) {
+    return undefined;
+  }
+
+  const work = workingSets(best.sets).sort((a, b) => a.setNumber - b.setNumber);
+  return {
+    date: best.session.sessionDate,
+    sets: work.map((s) => ({ setNumber: s.setNumber, reps: s.reps, weight: s.weight, weightUnit: s.weightUnit })),
+  };
 }
 
 // Completed-session counts over the last `days` days (inclusive of today).

@@ -8,6 +8,7 @@ export type RoutineItemRowValue = {
   defaultReps?: number;
   defaultWeight?: number;
   defaultWeightUnit?: WeightUnit;
+  restSeconds?: number;
 };
 
 export type RoutineItemRowProps = {
@@ -138,6 +139,13 @@ export function RoutineItemRow({
             step={effectiveWeightUnit === 'kg' ? 1 : 5}
             min={0}
             allowDecimal
+          />
+          <Stepper
+            label="Rest (s)"
+            value={item.restSeconds}
+            onChange={(v) => onChange({ restSeconds: v })}
+            min={0}
+            step={15}
           />
         </div>
       ) : null}

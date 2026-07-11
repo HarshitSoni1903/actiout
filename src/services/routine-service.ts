@@ -94,7 +94,7 @@ async function hydrate(
   database: ActiOutDB
 ): Promise<RoutineTemplate | undefined> {
   const templateRow = await database.routineTemplates.get(templateId);
-  if (!templateRow || templateRow.isArchived) {
+  if (!templateRow) {
     return undefined;
   }
 
@@ -156,7 +156,6 @@ export async function createRoutine(input: RoutineInput, database: ActiOutDB = d
         notes: input.notes,
         defaultSets: input.defaultSets,
         defaultReps: input.defaultReps,
-        isArchived: false,
         createdAt: now,
         updatedAt: now,
       });
@@ -208,7 +207,6 @@ export async function updateRoutine(
         notes: input.notes,
         defaultSets: input.defaultSets,
         defaultReps: input.defaultReps,
-        isArchived: existing.isArchived,
         createdAt: existing.createdAt,
         updatedAt: now,
       });
@@ -265,12 +263,8 @@ export async function getRoutine(id: string, database: ActiOutDB = db): Promise<
 }
 
 export async function listRoutines(database: ActiOutDB = db): Promise<RoutineTemplate[]> {
-  // Filtered in JS rather than via the `isArchived` index: IndexedDB doesn't
-  // accept booleans as valid index key values, so an indexed `.equals(false)`
-  // query would silently miss rows.
   const rows = await database.routineTemplates.toArray();
-  const nonArchived = rows.filter((row) => !row.isArchived);
-  const hydrated = await Promise.all(nonArchived.map((row) => hydrate(row.id, database)));
+  const hydrated = await Promise.all(rows.map((row) => hydrate(row.id, database)));
   return hydrated
     .filter((r): r is RoutineTemplate => r !== undefined)
     .sort((a, b) => a.name.localeCompare(b.name));

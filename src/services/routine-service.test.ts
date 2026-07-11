@@ -109,6 +109,23 @@ describe('routine-service (db-backed)', () => {
       const events = await testDb.appEvents.where('[entityType+entityId]').equals(['routine', routine.id]).toArray();
       expect(events.map((e) => e.eventType)).toContain('created');
     });
+
+    it('createRoutine persists per-item restSeconds and updateRoutine changes it', async () => {
+      const created = await createRoutine(
+        { name: 'R', daysOfWeek: [], items: [{ exerciseName: 'Squat', restSeconds: 120 }] },
+        testDb
+      );
+      let r = await getRoutine(created.id, testDb);
+      expect(r?.items[0]?.restSeconds).toBe(120);
+
+      await updateRoutine(
+        created.id,
+        { name: 'R', daysOfWeek: [], items: [{ exerciseName: 'Squat', restSeconds: 60 }] },
+        testDb
+      );
+      r = await getRoutine(created.id, testDb);
+      expect(r?.items[0]?.restSeconds).toBe(60);
+    });
   });
 
   describe('routinesForWeekday', () => {
@@ -138,7 +155,7 @@ describe('routine-service (db-backed)', () => {
       expect(fetched).toBeUndefined();
     });
 
-    it('listRoutines returns non-archived routines hydrated, ordered by name', async () => {
+    it('listRoutines returns all routines hydrated, ordered by name', async () => {
       await createRoutine(baseInput({ name: 'Zeta Routine' }), testDb);
       await createRoutine(baseInput({ name: 'Alpha Routine' }), testDb);
 

@@ -1,11 +1,11 @@
 import { useId, useState } from 'react';
-import type { SessionItem } from '../../domain/types';
-import { formatWeight } from '../../domain/units';
-import { Stepper } from '../common/Stepper';
+import { useLiveQuery } from 'dexie-react-hooks';
+import type { SessionItem, SessionSet } from '../../domain/types';
+import { getLastPerformance } from '../../services/analytics-service';
+import { addSet, isItemComplete, listSetsForItem, removeSet, updateSet } from '../../services/session-set-service';
+import { useUiStore } from '../../state/ui-store';
 
-export type SessionItemUpdate = Partial<
-  Pick<SessionItem, 'setsActual' | 'repsActual' | 'weightActual' | 'notes' | 'completed'>
->;
+export type SessionItemUpdate = Partial<Pick<SessionItem, 'notes'>>;
 
 export type SessionItemCardProps = {
   item: SessionItem;
@@ -13,7 +13,8 @@ export type SessionItemCardProps = {
   isFirst: boolean;
   isLast: boolean;
   // Omitted entirely (never invoked) when `readOnly` is set — completed/dnf
-  // sessions render a read-only summary with no editing controls.
+  // sessions render a read-only summary with no editing controls, unless the
+  // session has been unlocked for editing (SessionScreen flips readOnly off).
   onUpdate?(patch: SessionItemUpdate): void;
   onMoveUp?(): void;
   onMoveDown?(): void;
@@ -21,26 +22,27 @@ export type SessionItemCardProps = {
   readOnly?: boolean;
 };
 
-// Display-only rounding — the stored value keeps full precision until the
-// user actually edits it via the stepper, at which point the edit naturally
-// replaces it with a rounded value.
-function roundWeight(value: number | undefined): number | undefined {
-  return value === undefined ? undefined : Math.round(value * 10) / 10;
-}
+type SetPatch = Partial<Pick<SessionSet, 'reps' | 'weight' | 'isWarmup' | 'completed'>>;
 
-function summarize(item: SessionItem): string {
-  const parts: string[] = [];
-  if (item.setsActual !== undefined && item.repsActual !== undefined) {
-    parts.push(`${item.setsActual}×${item.repsActual}`);
-  } else if (item.setsActual !== undefined) {
-    parts.push(`${item.setsActual} sets`);
-  } else if (item.repsActual !== undefined) {
-    parts.push(`${item.repsActual} reps`);
+type LastPerformance = Awaited<ReturnType<typeof getLastPerformance>>;
+
+function formatLastPerformance(last: LastPerformance): string | undefined {
+  if (!last || last.sets.length === 0) {
+    return undefined;
   }
-  if (item.weightActual !== undefined) {
-    parts.push(formatWeight(item.weightActual, item.weightUnit));
-  }
-  return parts.length > 0 ? parts.join(' · ') : 'No data';
+  const parts = last.sets.map((s) => {
+    if (s.reps !== undefined && s.weight !== undefined) {
+      return `${s.reps}×${s.weight}`;
+    }
+    if (s.reps !== undefined) {
+      return `${s.reps} reps`;
+    }
+    if (s.weight !== undefined) {
+      return `${s.weight}`;
+    }
+    return '-';
+  });
+  return `Last: ${parts.join(', ')} on ${last.date}`;
 }
 
 export function SessionItemCard({
@@ -58,6 +60,16 @@ export function SessionItemCard({
   const [notesDraft, setNotesDraft] = useState(item.notes ?? '');
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const notesId = useId();
+  const startRestTimer = useUiStore((state) => state.startRestTimer);
+
+  const sets = useLiveQuery(() => listSetsForItem(item.id), [item.id]) ?? [];
+  const lastPerformance = useLiveQuery(
+    () => getLastPerformance(item.exerciseNameSnapshot),
+    [item.exerciseNameSnapshot]
+  );
+
+  const done = isItemComplete(sets);
+  const lastHint = formatLastPerformance(lastPerformance);
 
   function expandNotes() {
     setNotesDraft(item.notes ?? '');
@@ -70,9 +82,24 @@ export function SessionItemCard({
     setNotesExpanded(false);
   }
 
+  function handleAddSet() {
+    void addSet(item.id);
+  }
+
+  function handleRemoveSet(setId: string) {
+    void removeSet(setId);
+  }
+
+  function handleSetChange(set: SessionSet, patch: SetPatch) {
+    void updateSet(set.id, patch);
+    if (patch.completed === true && item.restSeconds) {
+      startRestTimer(item.id, item.restSeconds);
+    }
+  }
+
   return (
     <li
-      className={`session-item-card${item.completed ? ' session-item-card--done' : ''}${
+      className={`session-item-card${done ? ' session-item-card--done' : ''}${
         readOnly ? ' session-item-card--readonly' : ''
       }`}
     >
@@ -80,69 +107,97 @@ export function SessionItemCard({
         <span className="session-item-card__position">{position}</span>
         <div className="session-item-card__main">
           <span className="session-item-card__name">{item.exerciseNameSnapshot}</span>
-          {readOnly || item.completed ? (
-            <span className="session-item-card__summary">{summarize(item)}</span>
-          ) : null}
+          {lastHint ? <p className="session-item-card__last">{lastHint}</p> : null}
         </div>
-        {readOnly ? null : (
-          <button
-            type="button"
-            className="session-item-card__done-toggle"
-            aria-pressed={item.completed}
-            aria-label={item.completed ? `Mark ${item.exerciseNameSnapshot} not done` : `Mark ${item.exerciseNameSnapshot} done`}
-            onClick={() => onUpdate?.({ completed: !item.completed })}
-          >
-            {item.completed ? '✓' : ''}
-          </button>
+      </div>
+
+      <div className="session-item-card__sets">
+        {sets.map((set) =>
+          readOnly ? (
+            <p key={set.id} className="session-item-card__set-row-readonly">
+              Set {set.setNumber}: {set.reps ?? '-'} reps &times; {set.weight ?? '-'} {set.weightUnit}
+              {set.isWarmup ? ' (warmup)' : ''}
+              {set.completed ? ' ✓' : ''}
+            </p>
+          ) : (
+            <div key={set.id} className="session-item-card__set-row">
+              <span className="session-item-card__set-number">{set.setNumber}</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                aria-label={`Set ${set.setNumber} reps`}
+                value={set.reps ?? ''}
+                onChange={(event) =>
+                  handleSetChange(set, { reps: event.target.value === '' ? undefined : Number(event.target.value) })
+                }
+              />
+              <input
+                type="number"
+                inputMode="decimal"
+                aria-label={`Set ${set.setNumber} weight`}
+                value={set.weight ?? ''}
+                onChange={(event) =>
+                  handleSetChange(set, {
+                    weight: event.target.value === '' ? undefined : Number(event.target.value),
+                  })
+                }
+              />
+              <span className="session-item-card__set-unit">{set.weightUnit}</span>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={set.isWarmup}
+                  onChange={(event) => handleSetChange(set, { isWarmup: event.target.checked })}
+                />
+                Warmup
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={set.completed}
+                  onChange={(event) => handleSetChange(set, { completed: event.target.checked })}
+                />
+                Done
+              </label>
+              <button
+                type="button"
+                aria-label={`Remove set ${set.setNumber}`}
+                onClick={() => handleRemoveSet(set.id)}
+              >
+                &times;
+              </button>
+            </div>
+          )
         )}
       </div>
 
-      {!readOnly && !item.completed ? (
-        <>
-          <div className="session-item-card__steppers">
-            <Stepper
-              label="Sets"
-              value={item.setsActual}
-              onChange={(v) => onUpdate?.({ setsActual: v })}
-              min={0}
-            />
-            <Stepper
-              label="Reps"
-              value={item.repsActual}
-              onChange={(v) => onUpdate?.({ repsActual: v })}
-              min={0}
-            />
-            <Stepper
-              label={`Weight (${item.weightUnit})`}
-              value={roundWeight(item.weightActual)}
-              onChange={(v) => onUpdate?.({ weightActual: v })}
-              step={item.weightUnit === 'kg' ? 1 : 5}
-              min={0}
-              allowDecimal
-            />
-          </div>
+      {readOnly ? null : (
+        <button type="button" className="session-item-card__add-set-btn" onClick={handleAddSet}>
+          Add set
+        </button>
+      )}
 
-          <div className="session-item-card__notes">
-            {notesExpanded ? (
-              <textarea
-                id={notesId}
-                name={notesId}
-                className="session-item-card__notes-input"
-                autoFocus
-                value={notesDraft}
-                onChange={(event) => setNotesDraft(event.target.value)}
-                onBlur={commitNotes}
-                placeholder="Notes"
-                aria-label={`Notes for ${item.exerciseNameSnapshot}`}
-              />
-            ) : (
-              <button type="button" className="session-item-card__notes-toggle" onClick={expandNotes}>
-                {item.notes ? item.notes : 'Add note'}
-              </button>
-            )}
-          </div>
-        </>
-      ) : null}
+      {readOnly ? null : (
+        <div className="session-item-card__notes">
+          {notesExpanded ? (
+            <textarea
+              id={notesId}
+              name={notesId}
+              className="session-item-card__notes-input"
+              autoFocus
+              value={notesDraft}
+              onChange={(event) => setNotesDraft(event.target.value)}
+              onBlur={commitNotes}
+              placeholder="Notes"
+              aria-label={`Notes for ${item.exerciseNameSnapshot}`}
+            />
+          ) : (
+            <button type="button" className="session-item-card__notes-toggle" onClick={expandNotes}>
+              {item.notes ? item.notes : 'Add note'}
+            </button>
+          )}
+        </div>
+      )}
 
       {readOnly && item.notes ? <p className="session-item-card__notes-readonly">{item.notes}</p> : null}
 
