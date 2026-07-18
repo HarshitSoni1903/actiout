@@ -11,6 +11,8 @@
 export type WeightUnit = 'lb' | 'kg';
 export type SessionStatus = 'draft' | 'completed' | 'dnf';
 export type DraftConflictAction = 'ask' | 'resume' | 'close-and-start-new';
+// basic = one entry per exercise; advanced = log each set individually.
+export type LoggingMode = 'basic' | 'advanced';
 
 export type Preference = {
   id: string;
@@ -18,6 +20,9 @@ export type Preference = {
   weightUnit: WeightUnit;
   distanceUnit: 'mi' | 'km';
   defaultDraftConflictAction: DraftConflictAction;
+  // Optional: preference rows created before this field existed lack it;
+  // readers fall back to 'basic'.
+  loggingMode?: LoggingMode;
 };
 
 export type ExerciseCatalogEntry = {

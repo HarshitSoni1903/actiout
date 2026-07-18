@@ -23,6 +23,7 @@ describe('preference-service', () => {
         weightUnit: 'lb',
         distanceUnit: 'mi',
         defaultDraftConflictAction: 'ask',
+        loggingMode: 'basic',
       });
 
       const count = await testDb.preferences.count();

@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <rect width="390" height="844" fill="#f6f6f4"/>
+
+  <!-- Header -->
+  <text x="32" y="66"
+        font-family="Inter, Arial, sans-serif"
+        font-size="28"
+        font-weight="700"
+        fill="#101214">Routines</text>
+
+  <text x="32" y="92"
+        font-family="Inter, Arial, sans-serif"
+        font-size="13"
+        font-weight="500"
+        fill="#6b7280">Create and customize your workouts.</text>
+
+  <!-- New routine -->
+  <rect x="32" y="116" width="326" height="50" rx="16" fill="#2b8a57"/>
+  <text x="195" y="148"
+        font-family="Inter, Arial, sans-serif"
+        font-size="16"
+        font-weight="700"
+        fill="#ffffff"
+        text-anchor="middle">+ New routine</text>
+
+  <!-- Section label -->
+  <text x="32" y="212"
+        font-family="Inter, Arial, sans-serif"
+        font-size="14"
+        font-weight="700"
+        fill="#6b7280">YOUR ROUTINES</text>
+
+  <!-- Chest A -->
+  <text x="32" y="260"
+        font-family="Inter, Arial, sans-serif"
+        font-size="21"
+        font-weight="700"
+        fill="#101214">Chest A</text>
+
+  <text x="32" y="286"
+        font-family="Inter, Arial, sans-serif"
+        font-size="13"
+        font-weight="500"
+        fill="#6b7280">Incline DB Press (3×10) · Chest Press (3×10) · Fly (3×12)</text>
+
+  <rect x="32" y="306" width="154" height="42" rx="14" fill="#2b8a57"/>
+  <text x="109" y="333"
+        font-family="Inter, Arial, sans-serif"
+        font-size="14"
+        font-weight="700"
+        fill="#ffffff"
+        text-anchor="middle">Start exercise</text>
+
+  <text x="338" y="333"
+        font-family="Inter, Arial, sans-serif"
+        font-size="14"
+        font-weight="600"
+        fill="#6b7280"
+        text-anchor="end"
+        text-decoration="underline">Edit</text>
+
+  <line x1="32" y1="378" x2="358" y2="378"
+        stroke="#dfe3e7"
+        stroke-width="1.2"/>
+
+  <!-- Back & Biceps -->
+  <text x="32" y="426"
+        font-family="Inter, Arial, sans-serif"
+        font-size="21"
+        font-weight="700"
+        fill="#101214">Back &amp; Biceps</text>
+
+  <!-- Each line contains complete exercise/target units -->
+  <text x="32" y="452"
+        font-family="Inter, Arial, sans-serif"
+        font-size="13"
+        font-weight="500"
+        fill="#6b7280">Lat Pulldown (3×10) · Cable Row (3×12)</text>
+
+  <text x="32" y="474"
+        font-family="Inter, Arial, sans-serif"
+        font-size="13"
+        font-weight="500"
+        fill="#6b7280">Hammer Curl (3×12)</text>
+
+  <rect x="32" y="494" width="154" height="42" rx="14" fill="#2b8a57"/>
+  <text x="109" y="521"
+        font-family="Inter, Arial, sans-serif"
+        font-size="14"
+        font-weight="700"
+        fill="#ffffff"
+        text-anchor="middle">Start exercise</text>
+
+  <text x="338" y="521"
+        font-family="Inter, Arial, sans-serif"
+        font-size="14"
+        font-weight="600"
+        fill="#6b7280"
+        text-anchor="end"
+        text-decoration="underline">Edit</text>
+
+  <line x1="32" y1="566" x2="358" y2="566"
+        stroke="#dfe3e7"
+        stroke-width="1.2"/>
+
+  <!-- Legs -->
+  <text x="32" y="614"
+        font-family="Inter, Arial, sans-serif"
+        font-size="21"
+        font-weight="700"
+        fill="#101214">Legs</text>
+
+  <text x="32" y="640"
+        font-family="Inter, Arial, sans-serif"
+        font-size="13"
+        font-weight="500"
+        fill="#6b7280">Back Squat (3×8) · RDL (3×10) · Leg Press (3×12)</text>
+
+  <rect x="32" y="660" width="154" height="42" rx="14" fill="#2b8a57"/>
+  <text x="109" y="687"
+        font-family="Inter, Arial, sans-serif"
+        font-size="14"
+        font-weight="700"
+        fill="#ffffff"
+        text-anchor="middle">Start exercise</text>
+
+  <text x="338" y="687"
+        font-family="Inter, Arial, sans-serif"
+        font-size="14"
+        font-weight="600"
+        fill="#6b7280"
+        text-anchor="end"
+        text-decoration="underline">Edit</text>
+
+  <!-- Bottom navigation -->
+  <line x1="0" y1="742" x2="390" y2="742"
+        stroke="#d9dde3"
+        stroke-width="1.2"/>
+
+  <rect x="0" y="742" width="390" height="102" fill="#f6f6f4"/>
+
+  <text x="83" y="800"
+        font-family="Inter, Arial, sans-serif"
+        font-size="12.5"
+        font-weight="500"
+        fill="#6b7280"
+        text-anchor="middle">Home</text>
+
+  <text x="165" y="800"
+        font-family="Inter, Arial, sans-serif"
+        font-size="12.5"
+        font-weight="700"
+        fill="#2b8a57"
+        text-anchor="middle">Routines</text>
+
+  <text x="247" y="800"
+        font-family="Inter, Arial, sans-serif"
+        font-size="12.5"
+        font-weight="500"
+        fill="#6b7280"
+        text-anchor="middle">Progress</text>
+
+  <text x="330" y="800"
+        font-family="Inter, Arial, sans-serif"
+        font-size="12.5"
+        font-weight="500"
+        fill="#6b7280"
+        text-anchor="middle">Settings</text>
+</svg>

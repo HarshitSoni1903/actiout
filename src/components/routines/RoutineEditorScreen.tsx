@@ -43,8 +43,10 @@ export function RoutineEditorScreen() {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [category, setCategory] = useState('');
-  const [defaultSets, setDefaultSets] = useState<number | undefined>(undefined);
-  const [defaultReps, setDefaultReps] = useState<number | undefined>(undefined);
+  // New routines start prefilled with basic defaults (3×10, 90s rest on new
+  // items); editing an existing routine replaces these from the loaded row.
+  const [defaultSets, setDefaultSets] = useState<number | undefined>(3);
+  const [defaultReps, setDefaultReps] = useState<number | undefined>(10);
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([]);
   const [items, setItems] = useState<EditorItem[]>([]);
   const [saving, setSaving] = useState(false);
@@ -93,7 +95,7 @@ export function RoutineEditorScreen() {
   }
 
   function addItem(exerciseName: string) {
-    setItems((prev) => [...prev, { clientId: newId(), exerciseName }]);
+    setItems((prev) => [...prev, { clientId: newId(), exerciseName, restSeconds: 90 }]);
   }
 
   function updateItem(clientId: string, patch: Partial<EditorItem>) {

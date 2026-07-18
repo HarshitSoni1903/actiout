@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { DraftConflictAction, Preference } from '../../domain/types';
+import type { DraftConflictAction, LoggingMode, Preference } from '../../domain/types';
 import { getPreferences, updatePreferences } from '../../services/preference-service';
 import { exportBundle, importBundle, validateBundle } from '../../services/export-service';
 import type { ExportBundleV2 } from '../../services/export-service';
@@ -16,9 +16,7 @@ import type { SegmentedControlOption } from '../common/SegmentedControl';
 import { ImportConfirmModal } from './ImportConfirmModal';
 import './settings.css';
 
-// No build-time version constant exists in this project yet; hardcode until
-// one is wired up (e.g. via Vite's `define`).
-const APP_VERSION = 'v0.1.0';
+const APP_VERSION = `v${__APP_VERSION__}`;
 
 const WEIGHT_UNIT_OPTIONS: SegmentedControlOption[] = [
   { value: 'lb', label: 'lb' },
@@ -34,6 +32,11 @@ const THEME_OPTIONS: SegmentedControlOption[] = [
   { value: 'system', label: 'System' },
   { value: 'dark', label: 'Dark' },
   { value: 'light', label: 'Light' },
+];
+
+const LOGGING_MODE_OPTIONS: SegmentedControlOption[] = [
+  { value: 'basic', label: 'Basic' },
+  { value: 'advanced', label: 'Advanced' },
 ];
 
 const DRAFT_CONFLICT_OPTIONS: SegmentedControlOption[] = [
@@ -170,6 +173,14 @@ export function SettingsScreen() {
         />
       </Field>
 
+      <Field label="Logging mode" hint="Basic: one entry per exercise. Advanced: log each set individually.">
+        <SegmentedControl
+          options={LOGGING_MODE_OPTIONS}
+          value={preferences.loggingMode ?? 'basic'}
+          onChange={(value) => void updatePreferences({ loggingMode: value as LoggingMode })}
+        />
+      </Field>
+
       <Field label="Draft conflict default" hint="What to do when starting a session while a draft is already in progress">
         <SegmentedControl
           options={DRAFT_CONFLICT_OPTIONS}
@@ -230,6 +241,8 @@ export function SettingsScreen() {
       <ImportConfirmModal
         open={pendingRestoreId !== null}
         summary={snapshots?.find((s) => s.id === pendingRestoreId)?.summary ?? ''}
+        title="Restore snapshot"
+        confirmLabel="Confirm restore"
         onConfirm={() => void handleConfirmRestore()}
         onCancel={() => setPendingRestoreId(null)}
       />

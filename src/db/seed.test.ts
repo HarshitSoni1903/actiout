@@ -36,6 +36,7 @@ describe('initializeDb', () => {
       weightUnit: 'lb',
       distanceUnit: 'mi',
       defaultDraftConflictAction: 'ask',
+      loggingMode: 'basic',
     });
   });
 

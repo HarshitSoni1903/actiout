@@ -79,6 +79,7 @@ export async function initializeDb(database: ActiOutDB = db): Promise<void> {
         weightUnit: 'lb',
         distanceUnit: 'mi',
         defaultDraftConflictAction: 'ask',
+        loggingMode: 'basic',
       });
 
       await database.exerciseCatalog.bulkAdd(

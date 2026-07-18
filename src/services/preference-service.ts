@@ -9,6 +9,7 @@ const DEFAULT_PREFERENCES: Preference = {
   weightUnit: 'lb',
   distanceUnit: 'mi',
   defaultDraftConflictAction: 'ask',
+  loggingMode: 'basic',
 };
 
 // Returns the singleton preference row, creating it with spec defaults if
