@@ -40,6 +40,8 @@ export type RoutineTemplate = {
   name: string;
   category?: string;
   notes?: string;
+  // 'HH:MM' 24h local; absent = all-day (no fixed time)
+  timeOfDay?: string;
   defaultSets?: number;
   defaultReps?: number;
   daysOfWeek: number[];
@@ -57,6 +59,8 @@ export type RoutineTemplateItem = {
   defaultReps?: number;
   defaultWeight?: number;
   defaultWeightUnit?: WeightUnit;
+  // planned duration for timed exercises (e.g. plank); placeholder, no UI yet
+  defaultDurationSeconds?: number;
   restSeconds?: number;
   notes?: string;
 };
@@ -106,6 +110,8 @@ export type SessionSet = {
   setNumber: number;
   reps?: number;
   weight?: number;
+  // actual recorded duration for timed exercises; placeholder, timer UI pending
+  durationSeconds?: number;
   weightUnit: WeightUnit;
   isWarmup: boolean;
   completed: boolean;

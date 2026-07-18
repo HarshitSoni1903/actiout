@@ -266,6 +266,21 @@ describe('export-service (db-backed)', () => {
       }
     });
 
+    it('tolerates the optional timeOfDay/defaultDurationSeconds/durationSeconds placeholder fields', async () => {
+      await seedRoutinesAndSessions(dbx);
+
+      const bundle = await exportBundle(dbx);
+      const withPlaceholders: ExportBundleV2 = {
+        ...bundle,
+        routineTemplates: bundle.routineTemplates.map((row) => ({ ...row, timeOfDay: '06:30' })),
+        routineTemplateItems: bundle.routineTemplateItems.map((row) => ({ ...row, defaultDurationSeconds: 60 })),
+        sessionSets: bundle.sessionSets.map((row) => ({ ...row, durationSeconds: 45 })),
+      };
+
+      const result = validateBundle(withPlaceholders);
+      expect(result.ok).toBe(true);
+    });
+
     it('accepts a bundle with a dangling sessionRoutineLinks.routineTemplateId (deleted-routine case)', async () => {
       await seedRoutinesAndSessions(dbx);
 

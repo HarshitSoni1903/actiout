@@ -43,6 +43,7 @@ export function RoutineStartRows({
             {showCategory && routine.category ? (
               <span className="routine-rows__category">{routine.category}</span>
             ) : null}
+            {routine.timeOfDay ? <span className="routine-rows__time">{routine.timeOfDay}</span> : null}
           </span>
         );
 

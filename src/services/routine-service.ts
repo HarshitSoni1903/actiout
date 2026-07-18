@@ -12,6 +12,7 @@ export type RoutineItemInput = {
   defaultReps?: number;
   defaultWeight?: number;
   defaultWeightUnit?: WeightUnit;
+  defaultDurationSeconds?: number;
   restSeconds?: number;
   notes?: string;
 };
@@ -20,6 +21,7 @@ export type RoutineInput = {
   name: string;
   category?: string;
   notes?: string;
+  timeOfDay?: string;
   defaultSets?: number;
   defaultReps?: number;
   daysOfWeek: number[];
@@ -32,6 +34,15 @@ function validateName(name: string): string {
     throw new Error('RoutineInput: name must not be empty or whitespace-only');
   }
   return trimmed;
+}
+
+// 'HH:MM' 24-hour; undefined passes through (all-day routine).
+function validateTimeOfDay(timeOfDay: string | undefined): string | undefined {
+  if (timeOfDay === undefined) return undefined;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(timeOfDay)) {
+    throw new Error(`RoutineInput: timeOfDay must be 'HH:MM' 24-hour, got ${timeOfDay}`);
+  }
+  return timeOfDay;
 }
 
 // Validates each value is an integer 0-6 (0 = Sunday, matching Date#getDay())
@@ -80,6 +91,7 @@ async function buildItemRows(
       defaultReps: item.defaultReps,
       defaultWeight: item.defaultWeight,
       defaultWeightUnit,
+      defaultDurationSeconds: item.defaultDurationSeconds,
       restSeconds: item.restSeconds,
       notes: item.notes,
       createdAt: now,
@@ -115,6 +127,7 @@ async function hydrate(
       defaultReps: row.defaultReps,
       defaultWeight: row.defaultWeight,
       defaultWeightUnit: row.defaultWeightUnit,
+      defaultDurationSeconds: row.defaultDurationSeconds,
       restSeconds: row.restSeconds,
       notes: row.notes,
     }));
@@ -124,6 +137,7 @@ async function hydrate(
     name: templateRow.name,
     category: templateRow.category,
     notes: templateRow.notes,
+    timeOfDay: templateRow.timeOfDay,
     defaultSets: templateRow.defaultSets,
     defaultReps: templateRow.defaultReps,
     createdAt: templateRow.createdAt,
@@ -136,6 +150,7 @@ async function hydrate(
 export async function createRoutine(input: RoutineInput, database: ActiOutDB = db): Promise<RoutineTemplate> {
   const name = validateName(input.name);
   const daysOfWeek = normalizeDaysOfWeek(input.daysOfWeek);
+  const timeOfDay = validateTimeOfDay(input.timeOfDay);
 
   const id = newId();
   const now = nowIso();
@@ -154,6 +169,7 @@ export async function createRoutine(input: RoutineInput, database: ActiOutDB = d
         name,
         category: input.category,
         notes: input.notes,
+        timeOfDay,
         defaultSets: input.defaultSets,
         defaultReps: input.defaultReps,
         createdAt: now,
@@ -189,6 +205,7 @@ export async function updateRoutine(
 
   const name = validateName(input.name);
   const daysOfWeek = normalizeDaysOfWeek(input.daysOfWeek);
+  const timeOfDay = validateTimeOfDay(input.timeOfDay);
   const now = nowIso();
 
   const itemRows = await buildItemRows(id, input.items, now, database);
@@ -205,6 +222,7 @@ export async function updateRoutine(
         name,
         category: input.category,
         notes: input.notes,
+        timeOfDay,
         defaultSets: input.defaultSets,
         defaultReps: input.defaultReps,
         createdAt: existing.createdAt,
@@ -270,6 +288,18 @@ export async function listRoutines(database: ActiOutDB = db): Promise<RoutineTem
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// "Due order": routines with a timeOfDay come first, ascending by time
+// ('HH:MM' zero-padded strings compare lexicographically), then all-day
+// routines; name.localeCompare breaks ties within each group.
+function compareDueOrder(a: RoutineTemplate, b: RoutineTemplate): number {
+  if (a.timeOfDay !== undefined && b.timeOfDay !== undefined) {
+    return a.timeOfDay.localeCompare(b.timeOfDay) || a.name.localeCompare(b.name);
+  }
+  if (a.timeOfDay !== undefined) return -1;
+  if (b.timeOfDay !== undefined) return 1;
+  return a.name.localeCompare(b.name);
+}
+
 export async function routinesForWeekday(weekday: number, database: ActiOutDB = db): Promise<RoutineTemplate[]> {
   // No standalone `weekday` index exists (only the compound
   // `[routineTemplateId+weekday]`), so filter in JS instead.
@@ -278,5 +308,5 @@ export async function routinesForWeekday(weekday: number, database: ActiOutDB = 
   const hydrated = await Promise.all(templateIds.map((templateId) => hydrate(templateId, database)));
   return hydrated
     .filter((r): r is RoutineTemplate => r !== undefined)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort(compareDueOrder);
 }

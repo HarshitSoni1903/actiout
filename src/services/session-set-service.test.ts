@@ -50,6 +50,18 @@ it('removeSet renumbers survivors 1..m', async () => {
   expect(survivors.some((s) => s.id === c.id && s.setNumber === 2)).toBe(true);
 });
 
+it('addSet stores durationSeconds', async () => {
+  const s = await addSet(itemId, { durationSeconds: 45 }, dbx);
+  expect(s.durationSeconds).toBe(45);
+});
+
+it('updateSet persists durationSeconds', async () => {
+  const s = await addSet(itemId, {}, dbx);
+  await updateSet(s.id, { durationSeconds: 90 }, dbx);
+  const got = await dbx.sessionSets.get(s.id);
+  expect(got?.durationSeconds).toBe(90);
+});
+
 it('isItemComplete: false with no sets', () => {
   expect(isItemComplete([])).toBe(false);
 });

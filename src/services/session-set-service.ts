@@ -4,7 +4,7 @@ import { nowIso } from '../utils/dates';
 import { newId } from '../utils/ids';
 import { getPreferences } from './preference-service';
 
-type SetPatch = Partial<Pick<SessionSet, 'reps' | 'weight' | 'weightUnit' | 'isWarmup' | 'completed'>>;
+type SetPatch = Partial<Pick<SessionSet, 'reps' | 'weight' | 'weightUnit' | 'isWarmup' | 'completed' | 'durationSeconds'>>;
 
 export async function addSet(
   sessionItemId: string,

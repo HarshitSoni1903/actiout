@@ -48,6 +48,7 @@ export function RoutineEditorScreen() {
   const [defaultSets, setDefaultSets] = useState<number | undefined>(3);
   const [defaultReps, setDefaultReps] = useState<number | undefined>(10);
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([]);
+  const [timeOfDay, setTimeOfDay] = useState('');
   const [items, setItems] = useState<EditorItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -69,6 +70,7 @@ export function RoutineEditorScreen() {
       setDefaultSets(existingRoutine.defaultSets);
       setDefaultReps(existingRoutine.defaultReps);
       setDaysOfWeek(existingRoutine.daysOfWeek);
+      setTimeOfDay(existingRoutine.timeOfDay ?? '');
       setItems(
         existingRoutine.items.map((item) => ({
           clientId: newId(),
@@ -133,6 +135,7 @@ export function RoutineEditorScreen() {
       name: trimmedName,
       category: category === '' ? undefined : category,
       notes: notesRef.current,
+      timeOfDay: timeOfDay === '' ? undefined : timeOfDay,
       defaultSets,
       defaultReps,
       daysOfWeek,
@@ -241,6 +244,16 @@ export function RoutineEditorScreen() {
           })}
         </div>
       </div>
+
+      <Field label="Time of day (optional)" htmlFor="routine-time-of-day">
+        <input
+          id="routine-time-of-day"
+          type="time"
+          className="routine-editor__input"
+          value={timeOfDay}
+          onChange={(event) => setTimeOfDay(event.target.value)}
+        />
+      </Field>
 
       <div className="routine-editor__defaults">
         <Stepper label="Default sets" value={defaultSets} onChange={setDefaultSets} min={0} />

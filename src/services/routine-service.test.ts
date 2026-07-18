@@ -126,6 +126,48 @@ describe('routine-service (db-backed)', () => {
       r = await getRoutine(created.id, testDb);
       expect(r?.items[0]?.restSeconds).toBe(60);
     });
+
+    it('creates a routine with a timeOfDay and round-trips it through getRoutine', async () => {
+      const routine = await createRoutine(baseInput({ timeOfDay: '06:30' }), testDb);
+      expect(routine.timeOfDay).toBe('06:30');
+
+      const fetched = await getRoutine(routine.id, testDb);
+      expect(fetched?.timeOfDay).toBe('06:30');
+    });
+
+    it('creates a routine without a timeOfDay as undefined (all-day)', async () => {
+      const routine = await createRoutine(baseInput(), testDb);
+      expect(routine.timeOfDay).toBeUndefined();
+    });
+
+    it('rejects invalid timeOfDay values', async () => {
+      await expect(createRoutine(baseInput({ timeOfDay: '25:00' }), testDb)).rejects.toThrow();
+      await expect(createRoutine(baseInput({ timeOfDay: '9:00' }), testDb)).rejects.toThrow();
+      await expect(createRoutine(baseInput({ timeOfDay: 'noon' }), testDb)).rejects.toThrow();
+    });
+
+    it('round-trips item defaultDurationSeconds through create -> getRoutine', async () => {
+      const routine = await createRoutine(
+        baseInput({ items: [{ exerciseName: 'Plank', defaultDurationSeconds: 60 }] }),
+        testDb
+      );
+      expect(routine.items[0]?.defaultDurationSeconds).toBe(60);
+
+      const fetched = await getRoutine(routine.id, testDb);
+      expect(fetched?.items[0]?.defaultDurationSeconds).toBe(60);
+    });
+  });
+
+  describe('updateRoutine timeOfDay', () => {
+    it('can set and then clear a previously set timeOfDay (full-replace semantics)', async () => {
+      const created = await createRoutine(baseInput({ timeOfDay: '06:30' }), testDb);
+
+      const withTime = await updateRoutine(created.id, baseInput({ timeOfDay: '18:00' }), testDb);
+      expect(withTime.timeOfDay).toBe('18:00');
+
+      const cleared = await updateRoutine(created.id, baseInput(), testDb);
+      expect(cleared.timeOfDay).toBeUndefined();
+    });
   });
 
   describe('routinesForWeekday', () => {
@@ -137,6 +179,15 @@ describe('routine-service (db-backed)', () => {
       const results = await routinesForWeekday(today, testDb);
       expect(results.map((r) => r.id)).toContain(routine.id);
       expect(results.map((r) => r.name)).not.toContain('Other Day Routine');
+    });
+
+    it('sorts into due order: timed routines ascending by time first, then all-day routines, name as tiebreak', async () => {
+      await createRoutine(baseInput({ name: 'Alpha', daysOfWeek: [today] }), testDb);
+      await createRoutine(baseInput({ name: 'Zulu', daysOfWeek: [today], timeOfDay: '07:00' }), testDb);
+      await createRoutine(baseInput({ name: 'Mid', daysOfWeek: [today], timeOfDay: '18:30' }), testDb);
+
+      const results = await routinesForWeekday(today, testDb);
+      expect(results.map((r) => r.name)).toEqual(['Zulu', 'Mid', 'Alpha']);
     });
   });
 
