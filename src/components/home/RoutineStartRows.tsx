@@ -1,5 +1,7 @@
+import { Badge, Button, Checkbox, Group, Stack, Text } from '@mantine/core';
+import { IconCheck } from '@tabler/icons-react';
 import type { RoutineTemplate } from '../../domain/types';
-import { Button } from '../common/Button';
+import { summaryLine } from '../routines/routine-summary';
 
 // Shared row list for "start a routine" surfaces (Today section + the
 // all-routines picker): per-row Start button, or checkboxes in multi-select
@@ -7,7 +9,6 @@ import { Button } from '../common/Button';
 export type RoutineStartRowsProps = {
   routines: RoutineTemplate[];
   doneIds?: Set<string>;
-  suggestedId?: string;
   showCategory?: boolean;
   multiSelect: boolean;
   selectedIds: Set<string>;
@@ -18,7 +19,6 @@ export type RoutineStartRowsProps = {
 export function RoutineStartRows({
   routines,
   doneIds,
-  suggestedId,
   showCategory = false,
   multiSelect,
   selectedIds,
@@ -26,54 +26,59 @@ export function RoutineStartRows({
   onStart,
 }: RoutineStartRowsProps) {
   return (
-    <ul className="routine-rows">
+    <Stack gap="sm">
       {routines.map((routine) => {
         const done = doneIds?.has(routine.id) ?? false;
         const checked = selectedIds.has(routine.id);
 
         const nameBlock = (
-          <span className="routine-rows__name">
-            {done ? (
-              <span className="routine-rows__check" aria-hidden="true">
-                &#10003;
-              </span>
+          <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
+            <Group gap={6} wrap="nowrap">
+              {done ? <IconCheck size={16} color="var(--mantine-color-actiGreen-filled)" aria-hidden="true" /> : null}
+              <Text fw={600} truncate style={{ flex: 1, minWidth: 0 }}>
+                {routine.name}
+                {done ? <span className="visually-hidden"> (done)</span> : null}
+              </Text>
+              {showCategory && routine.category ? (
+                <Badge variant="light" color="gray" size="sm">
+                  {routine.category}
+                </Badge>
+              ) : null}
+              {routine.timeOfDay ? (
+                <Badge variant="light" color="gray" size="sm">
+                  {routine.timeOfDay}
+                </Badge>
+              ) : null}
+            </Group>
+            {routine.items.length > 0 ? (
+              <Text size="xs" c="dimmed" truncate>
+                {summaryLine(routine)}
+              </Text>
             ) : null}
-            {routine.name}
-            {done ? <span className="visually-hidden"> (done)</span> : null}
-            {showCategory && routine.category ? (
-              <span className="routine-rows__category">{routine.category}</span>
-            ) : null}
-            {routine.timeOfDay ? <span className="routine-rows__time">{routine.timeOfDay}</span> : null}
-          </span>
+          </Stack>
         );
 
         return (
-          <li key={routine.id} className="routine-rows__item">
+          <Group key={routine.id} justify="space-between" align="flex-start" wrap="nowrap">
             {multiSelect ? (
-              <label className="routine-rows__checkbox-label">
-                <input
-                  type="checkbox"
-                  className="routine-rows__checkbox"
-                  checked={checked}
-                  onChange={() => onToggleSelect(routine.id)}
-                />
-                {nameBlock}
-              </label>
+              <Checkbox
+                checked={checked}
+                onChange={() => onToggleSelect(routine.id)}
+                label={nameBlock}
+                styles={{ body: { alignItems: 'flex-start', flex: 1, minWidth: 0 }, labelWrapper: { flex: 1, minWidth: 0 } }}
+              />
             ) : (
               nameBlock
             )}
 
             {!multiSelect ? (
-              <Button
-                variant={routine.id === suggestedId ? 'primary' : 'ghost'}
-                onClick={() => onStart(routine.id)}
-              >
+              <Button size="lg" onClick={() => onStart(routine.id)}>
                 Start
               </Button>
             ) : null}
-          </li>
+          </Group>
         );
       })}
-    </ul>
+    </Stack>
   );
 }

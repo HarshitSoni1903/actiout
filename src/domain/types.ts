@@ -99,6 +99,10 @@ export type SessionItem = {
   restSeconds?: number;
   notes?: string;
   fatigueGroup?: string;
+  // stamped on first tap-to-activate; absent while queued
+  activatedAt?: string;
+  // per-exercise DNF; toggled independently of session-level status
+  dnfAt?: string;
   createdAt: string;
   updatedAt: string;
 };

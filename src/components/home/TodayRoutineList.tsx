@@ -1,12 +1,13 @@
+import { Anchor, Button, Group, Stack, Text, Title } from '@mantine/core';
 import type { RoutineTemplate } from '../../domain/types';
-import { Button } from '../common/Button';
-import { EmptyState } from '../common/EmptyState';
+import { summaryLine } from '../routines/routine-summary';
 import { RoutineStartRows } from './RoutineStartRows';
 
 export type TodayRoutineListProps = {
   routines: RoutineTemplate[];
   doneIds: Set<string>;
   suggestedId?: string;
+  dueLabel?: string;
   multiSelect: boolean;
   selectedIds: Set<string>;
   onToggleSelect(id: string): void;
@@ -20,6 +21,7 @@ export function TodayRoutineList({
   routines,
   doneIds,
   suggestedId,
+  dueLabel,
   multiSelect,
   selectedIds,
   onToggleSelect,
@@ -30,44 +32,73 @@ export function TodayRoutineList({
 }: TodayRoutineListProps) {
   if (routines.length === 0) {
     return (
-      <section className="today-list">
-        <h2 className="today-list__heading">Today</h2>
-        <EmptyState
-          title="Nothing scheduled."
-          action={
-            <Button variant="primary" onClick={onStartAWorkout}>
-              Start a workout
-            </Button>
-          }
-        />
-      </section>
+      <Stack gap="md">
+        <Text size="sm" fw={700} c="dimmed" tt="uppercase">
+          Today
+        </Text>
+        <Text c="dimmed" size="sm">
+          Nothing scheduled.
+        </Text>
+        <Button size="lg" fullWidth onClick={onStartAWorkout}>
+          Start a workout
+        </Button>
+      </Stack>
     );
   }
 
-  return (
-    <section className="today-list">
-      <div className="today-list__header">
-        <h2 className="today-list__heading">Today</h2>
-        <button type="button" className="today-list__select-link" onClick={onToggleMultiSelect}>
-          {multiSelect ? 'Cancel' : 'Select multiple'}
-        </button>
-      </div>
+  // The suggested routine (due-order's first unfinished one) gets pulled out
+  // into a hero block; the rest render as compact rows. In multi-select mode
+  // every routine — including the suggested one — becomes a plain checkbox row.
+  const showHero = !multiSelect && suggestedId !== undefined;
+  const suggested = showHero ? routines.find((routine) => routine.id === suggestedId) : undefined;
+  const rowRoutines = suggested ? routines.filter((routine) => routine.id !== suggestedId) : routines;
 
-      <RoutineStartRows
-        routines={routines}
-        doneIds={doneIds}
-        suggestedId={suggestedId}
-        multiSelect={multiSelect}
-        selectedIds={selectedIds}
-        onToggleSelect={onToggleSelect}
-        onStart={onStart}
-      />
+  return (
+    <Stack gap="lg">
+      <Group justify="space-between" align="center">
+        <Text size="sm" fw={700} c="dimmed" tt="uppercase">
+          Today
+        </Text>
+        <Anchor component="button" type="button" size="sm" c="dimmed" onClick={onToggleMultiSelect}>
+          {multiSelect ? 'Cancel' : 'Select multiple'}
+        </Anchor>
+      </Group>
+
+      {suggested ? (
+        <Stack gap={4}>
+          {dueLabel ? (
+            <Text size="xs" c="dimmed">
+              {dueLabel}
+            </Text>
+          ) : null}
+          <Title order={2}>{suggested.name}</Title>
+          {suggested.items.length > 0 ? (
+            <Text c="dimmed" size="sm">
+              {summaryLine(suggested)}
+            </Text>
+          ) : null}
+          <Button size="xl" fullWidth mt="sm" onClick={() => onStart(suggested.id)}>
+            Start workout
+          </Button>
+        </Stack>
+      ) : null}
+
+      {rowRoutines.length > 0 ? (
+        <RoutineStartRows
+          routines={rowRoutines}
+          doneIds={doneIds}
+          multiSelect={multiSelect}
+          selectedIds={selectedIds}
+          onToggleSelect={onToggleSelect}
+          onStart={onStart}
+        />
+      ) : null}
 
       {multiSelect ? (
-        <Button variant="primary" disabled={selectedIds.size === 0} onClick={onStartSelected}>
+        <Button size="lg" fullWidth disabled={selectedIds.size === 0} onClick={onStartSelected}>
           Start selected
         </Button>
       ) : null}
-    </section>
+    </Stack>
   );
 }

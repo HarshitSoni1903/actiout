@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { ActionIcon, Card, Group, NumberInput, SegmentedControl, Stack, Text, Textarea } from '@mantine/core';
+import { IconChevronDown, IconChevronUp, IconTrash } from '@tabler/icons-react';
 import type { WeightUnit } from '../../domain/types';
-import { Stepper } from '../common/Stepper';
 
 export type RoutineItemRowValue = {
   exerciseName: string;
@@ -9,6 +9,7 @@ export type RoutineItemRowValue = {
   defaultWeight?: number;
   defaultWeightUnit?: WeightUnit;
   restSeconds?: number;
+  notes?: string;
 };
 
 export type RoutineItemRowProps = {
@@ -23,21 +24,6 @@ export type RoutineItemRowProps = {
   onRemove(): void;
 };
 
-function summarize(item: RoutineItemRowValue, weightUnit: WeightUnit): string {
-  const parts: string[] = [];
-  if (item.defaultSets !== undefined && item.defaultReps !== undefined) {
-    parts.push(`${item.defaultSets}×${item.defaultReps}`);
-  } else if (item.defaultSets !== undefined) {
-    parts.push(`${item.defaultSets} sets`);
-  } else if (item.defaultReps !== undefined) {
-    parts.push(`${item.defaultReps} reps`);
-  }
-  if (item.defaultWeight !== undefined) {
-    parts.push(`${item.defaultWeight} ${item.defaultWeightUnit ?? weightUnit}`);
-  }
-  return parts.length > 0 ? parts.join(' · ') : 'defaults';
-}
-
 export function RoutineItemRow({
   item,
   position,
@@ -49,106 +35,106 @@ export function RoutineItemRow({
   onMoveDown,
   onRemove,
 }: RoutineItemRowProps) {
-  const [expanded, setExpanded] = useState(false);
-  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const effectiveWeightUnit = item.defaultWeightUnit ?? weightUnit;
 
   return (
-    <li className="routine-item-row">
-      <div className="routine-item-row__header">
-        <button
-          type="button"
-          className="routine-item-row__toggle"
-          onClick={() => setExpanded((prev) => !prev)}
-          aria-expanded={expanded}
-        >
-          <span className="routine-item-row__position">{position}</span>
-          <span className="routine-item-row__main">
-            <span className="routine-item-row__name">{item.exerciseName}</span>
-            <span className="routine-item-row__summary">{summarize(item, weightUnit)}</span>
-          </span>
-        </button>
+    <Card withBorder radius="lg" padding="md">
+      <Stack gap="sm">
+        <Group justify="space-between" align="center" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+            <Text size="xs" c="dimmed" fw={700}>
+              {position}
+            </Text>
+            <Text fw={600} truncate>
+              {item.exerciseName}
+            </Text>
+          </Group>
 
-        <div className="routine-item-row__actions">
-          <button
-            type="button"
-            className="routine-item-row__reorder-btn"
-            aria-label={`Move ${item.exerciseName} up`}
-            disabled={isFirst}
-            onClick={onMoveUp}
-          >
-            &#9650;
-          </button>
-          <button
-            type="button"
-            className="routine-item-row__reorder-btn"
-            aria-label={`Move ${item.exerciseName} down`}
-            disabled={isLast}
-            onClick={onMoveDown}
-          >
-            &#9660;
-          </button>
-          {confirmingRemove ? (
-            <span className="routine-item-row__confirm">
-              <button
-                type="button"
-                className="routine-item-row__confirm-btn"
-                onClick={onRemove}
-              >
-                Remove
-              </button>
-              <button
-                type="button"
-                className="routine-item-row__cancel-btn"
-                onClick={() => setConfirmingRemove(false)}
-              >
-                Cancel
-              </button>
-            </span>
-          ) : (
-            <button
-              type="button"
-              className="routine-item-row__remove-btn"
-              aria-label={`Remove ${item.exerciseName}`}
-              onClick={() => setConfirmingRemove(true)}
+          <Group gap={4} wrap="nowrap">
+            <ActionIcon
+              variant="subtle"
+              aria-label={`Move ${item.exerciseName} up`}
+              disabled={isFirst}
+              onClick={onMoveUp}
             >
-              &times;
-            </button>
-          )}
-        </div>
-      </div>
+              <IconChevronUp size={18} />
+            </ActionIcon>
+            <ActionIcon
+              variant="subtle"
+              aria-label={`Move ${item.exerciseName} down`}
+              disabled={isLast}
+              onClick={onMoveDown}
+            >
+              <IconChevronDown size={18} />
+            </ActionIcon>
+            <ActionIcon
+              color="red"
+              variant="subtle"
+              aria-label={`Remove ${item.exerciseName}`}
+              onClick={onRemove}
+            >
+              <IconTrash size={18} />
+            </ActionIcon>
+          </Group>
+        </Group>
 
-      {expanded ? (
-        <div className="routine-item-row__panel">
-          <Stepper
+        <Group grow gap="sm">
+          <NumberInput
             label="Sets"
             value={item.defaultSets}
-            onChange={(v) => onChange({ defaultSets: v })}
+            onChange={(value) => onChange({ defaultSets: typeof value === 'number' ? value : undefined })}
             min={0}
+            step={1}
+            allowDecimal={false}
           />
-          <Stepper
+          <NumberInput
             label="Reps"
             value={item.defaultReps}
-            onChange={(v) => onChange({ defaultReps: v })}
+            onChange={(value) => onChange({ defaultReps: typeof value === 'number' ? value : undefined })}
             min={0}
+            step={1}
+            allowDecimal={false}
           />
-          <Stepper
+        </Group>
+
+        <Group align="flex-end" gap="sm" wrap="nowrap">
+          <NumberInput
             label={`Weight (${effectiveWeightUnit})`}
             value={item.defaultWeight}
-            onChange={(v) => onChange({ defaultWeight: v, defaultWeightUnit: v === undefined ? undefined : effectiveWeightUnit })}
+            onChange={(value) =>
+              onChange({
+                defaultWeight: typeof value === 'number' ? value : undefined,
+                defaultWeightUnit: typeof value === 'number' ? effectiveWeightUnit : undefined,
+              })
+            }
+            min={0}
             step={effectiveWeightUnit === 'kg' ? 1 : 5}
-            min={0}
-            allowDecimal
+            style={{ flex: 1 }}
           />
-          <Stepper
-            label="Rest (s)"
-            value={item.restSeconds}
-            onChange={(v) => onChange({ restSeconds: v })}
-            min={0}
-            step={15}
+          <SegmentedControl
+            data={['lb', 'kg']}
+            value={effectiveWeightUnit}
+            onChange={(value) => onChange({ defaultWeightUnit: value as WeightUnit })}
           />
-        </div>
-      ) : null}
-    </li>
+        </Group>
+
+        <NumberInput
+          label="Rest (s)"
+          value={item.restSeconds}
+          onChange={(value) => onChange({ restSeconds: typeof value === 'number' ? value : undefined })}
+          min={0}
+          step={15}
+          allowDecimal={false}
+        />
+
+        <Textarea
+          label="Notes"
+          autosize
+          minRows={2}
+          value={item.notes ?? ''}
+          onChange={(event) => onChange({ notes: event.currentTarget.value === '' ? undefined : event.currentTarget.value })}
+        />
+      </Stack>
+    </Card>
   );
 }

@@ -275,6 +275,7 @@ describe('export-service (db-backed)', () => {
         routineTemplates: bundle.routineTemplates.map((row) => ({ ...row, timeOfDay: '06:30' })),
         routineTemplateItems: bundle.routineTemplateItems.map((row) => ({ ...row, defaultDurationSeconds: 60 })),
         sessionSets: bundle.sessionSets.map((row) => ({ ...row, durationSeconds: 45 })),
+        sessionItems: bundle.sessionItems.map((row) => ({ ...row, activatedAt: nowIso(), dnfAt: nowIso() })),
       };
 
       const result = validateBundle(withPlaceholders);

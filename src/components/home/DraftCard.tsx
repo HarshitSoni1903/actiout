@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { Anchor, Button, Group, Stack, Text, Title } from '@mantine/core';
 import type { Session } from '../../domain/types';
-import { Button } from '../common/Button';
 
 export type DraftCardProps = {
   draft: Session;
+  summary?: string;
   onResume(): void;
+  onStartNew(): void;
   onMarkDnf(): void;
 };
 
@@ -15,7 +17,7 @@ function formatStartedTime(iso?: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
 }
 
-export function DraftCard({ draft, onResume, onMarkDnf }: DraftCardProps) {
+export function DraftCard({ draft, summary, onResume, onStartNew, onMarkDnf }: DraftCardProps) {
   const [confirmingDnf, setConfirmingDnf] = useState(false);
 
   const routineNames =
@@ -25,33 +27,45 @@ export function DraftCard({ draft, onResume, onMarkDnf }: DraftCardProps) {
   const total = draft.items.length;
 
   return (
-    <div className="draft-card">
-      <p className="draft-card__title">{routineNames}</p>
-      <p className="draft-card__meta">
+    <Stack gap={4}>
+      <Text size="sm" c="dimmed" fw={600}>
+        Continue
+      </Text>
+      <Title order={2}>{routineNames}</Title>
+      {summary ? (
+        <Text c="dimmed" size="sm">
+          {summary}
+        </Text>
+      ) : null}
+      <Text size="xs" c="dimmed">
         Started {formatStartedTime(draft.startedAt)}
         {total > 0 ? ` · ${total} exercises` : ''}
-      </p>
+      </Text>
+
+      <Button size="xl" fullWidth mt="sm" onClick={onResume}>
+        Continue
+      </Button>
+      <Button size="lg" fullWidth variant="outline" onClick={onStartNew}>
+        Start new workout
+      </Button>
 
       {confirmingDnf ? (
-        <div className="draft-card__confirm">
-          <span className="draft-card__confirm-text">Mark this session as not finished?</span>
-          <Button variant="danger" onClick={onMarkDnf}>
+        <Group gap="sm" mt="xs" wrap="wrap" align="center">
+          <Text size="sm" c="dimmed">
+            Mark this session as not finished?
+          </Text>
+          <Button size="sm" color="red" onClick={onMarkDnf}>
             Confirm
           </Button>
-          <Button variant="ghost" onClick={() => setConfirmingDnf(false)}>
+          <Button size="sm" variant="subtle" onClick={() => setConfirmingDnf(false)}>
             Cancel
           </Button>
-        </div>
+        </Group>
       ) : (
-        <div className="draft-card__actions">
-          <Button variant="primary" onClick={onResume}>
-            Resume
-          </Button>
-          <Button variant="danger" onClick={() => setConfirmingDnf(true)}>
-            Mark DNF
-          </Button>
-        </div>
+        <Anchor component="button" type="button" size="sm" c="dimmed" mt="xs" onClick={() => setConfirmingDnf(true)}>
+          Mark as not finished
+        </Anchor>
       )}
-    </div>
+    </Stack>
   );
 }

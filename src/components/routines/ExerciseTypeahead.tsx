@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { Autocomplete } from '@mantine/core';
 import type { ExerciseCatalogEntry } from '../../domain/types';
 import { searchExercises } from '../../services/exercise-service';
 
@@ -14,8 +15,8 @@ export type ExerciseTypeaheadProps = {
 export function ExerciseTypeahead({ onPick, placeholder }: ExerciseTypeaheadProps) {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<ExerciseCatalogEntry[]>([]);
-  const listboxId = useId();
   const timerRef = useRef<number | undefined>(undefined);
+  const lastCommitRef = useRef(0);
 
   useEffect(() => {
     if (timerRef.current !== undefined) {
@@ -44,6 +45,16 @@ export function ExerciseTypeahead({ onPick, placeholder }: ExerciseTypeaheadProp
     if (trimmed === '') {
       return;
     }
+    // A single Enter press can reach commit via both onOptionSubmit (when a
+    // suggestion is keyboard-highlighted) and our own onKeyDown fallback —
+    // Mantine doesn't let a consumer suppress one in favor of the other.
+    // Collapse any second commit within the same interaction into a no-op;
+    // whichever call lands first wins (the highlighted option, if any).
+    const now = Date.now();
+    if (now - lastCommitRef.current < 250) {
+      return;
+    }
+    lastCommitRef.current = now;
     onPick(trimmed);
     setQuery('');
     setSuggestions([]);
@@ -51,8 +62,14 @@ export function ExerciseTypeahead({ onPick, placeholder }: ExerciseTypeaheadProp
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter') {
-      // Enter always accepts the typed text verbatim, even if suggestions
-      // are showing — tapping a suggestion is the only way to pick one.
+      // Enter accepts the typed text verbatim — unless an option is actively
+      // highlighted (keyboard-navigated), in which case Mantine's
+      // onOptionSubmit will fire with that option's value and the raw-text
+      // commit here must yield to it (aria-activedescendant is how Mantine
+      // marks a highlighted option on the input).
+      if (event.currentTarget.getAttribute('aria-activedescendant')) {
+        return;
+      }
       event.preventDefault();
       commit(query);
     } else if (event.key === 'Escape') {
@@ -61,37 +78,14 @@ export function ExerciseTypeahead({ onPick, placeholder }: ExerciseTypeaheadProp
   }
 
   return (
-    <div className="exercise-typeahead">
-      <input
-        type="text"
-        className="exercise-typeahead__input"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder ?? 'Add exercise'}
-        aria-label={placeholder ?? 'Add exercise'}
-        role="combobox"
-        aria-expanded={suggestions.length > 0}
-        aria-controls={listboxId}
-        aria-autocomplete="list"
-      />
-      {suggestions.length > 0 ? (
-        <ul className="exercise-typeahead__suggestions" role="listbox" id={listboxId}>
-          {suggestions.map((suggestion) => (
-            <li key={suggestion.id} role="presentation">
-              <button
-                type="button"
-                role="option"
-                aria-selected={false}
-                className="exercise-typeahead__suggestion"
-                onClick={() => commit(suggestion.canonicalName)}
-              >
-                {suggestion.canonicalName}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+    <Autocomplete
+      value={query}
+      onChange={setQuery}
+      onOptionSubmit={commit}
+      onKeyDown={handleKeyDown}
+      data={suggestions.map((suggestion) => suggestion.canonicalName)}
+      placeholder={placeholder ?? 'Add exercise'}
+      aria-label={placeholder ?? 'Add exercise'}
+    />
   );
 }

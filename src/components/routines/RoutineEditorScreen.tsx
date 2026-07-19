@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
+import {
+  Anchor,
+  Button,
+  Chip,
+  Group,
+  Modal,
+  NumberInput,
+  Select,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
 import type { RoutineInput, RoutineItemInput } from '../../services/routine-service';
 import { createRoutine, deleteRoutine, getRoutine, updateRoutine } from '../../services/routine-service';
 import { getPreferences } from '../../services/preference-service';
 import { useUiStore } from '../../state/ui-store';
 import { newId } from '../../utils/ids';
-import { Button } from '../common/Button';
-import { Field } from '../common/Field';
-import { Modal } from '../common/Modal';
-import { Stepper } from '../common/Stepper';
 import { ExerciseTypeahead } from './ExerciseTypeahead';
 import { RoutineItemRow } from './RoutineItemRow';
-import './routines.css';
 
 const CATEGORY_OPTIONS = [
   'chest',
@@ -28,6 +36,7 @@ const CATEGORY_OPTIONS = [
 ];
 
 const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const WEEKDAY_FULL_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 type EditorItem = RoutineItemInput & { clientId: string };
 
@@ -90,10 +99,8 @@ export function RoutineEditorScreen() {
     }
   }, [id, existingRoutine]);
 
-  function toggleDay(day: number) {
-    setDaysOfWeek((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)
-    );
+  function toggleDays(values: string[]) {
+    setDaysOfWeek(values.map((value) => Number(value)).sort((a, b) => a - b));
   }
 
   function addItem(exerciseName: string) {
@@ -176,96 +183,98 @@ export function RoutineEditorScreen() {
   const isEditingExisting = Boolean(id);
   if (isEditingExisting && existingRoutine === undefined) {
     return (
-      <div className="routine-editor">
-        <p>Loading…</p>
-      </div>
+      <Stack gap="lg">
+        <Text c="dimmed">Loading…</Text>
+      </Stack>
     );
   }
 
   return (
-    <div className="routine-editor">
-      <div className="routine-editor__header">
-        <button type="button" className="routine-editor__back" onClick={() => navigate('/routines')}>
+    <Stack gap="lg" pb="xl">
+      <Stack gap={4}>
+        <Anchor component="button" type="button" size="sm" c="dimmed" onClick={() => navigate('/routines')}>
           &lsaquo; Routines
-        </button>
-        <h1 className="routine-editor__title">{isEditingExisting ? 'Edit routine' : 'New routine'}</h1>
-      </div>
+        </Anchor>
+        <Title order={1}>{isEditingExisting ? 'Edit routine' : 'New routine'}</Title>
+      </Stack>
 
-      <Field label="Name" htmlFor="routine-name" error={nameError}>
-        <input
-          id="routine-name"
-          type="text"
-          className="routine-editor__input"
-          value={name}
-          onChange={(event) => {
-            setName(event.target.value);
-            if (nameError) {
-              setNameError(undefined);
-            }
-          }}
-        />
-      </Field>
+      <TextInput
+        label="Name"
+        value={name}
+        error={nameError}
+        onChange={(event) => {
+          setName(event.currentTarget.value);
+          if (nameError) {
+            setNameError(undefined);
+          }
+        }}
+      />
 
-      <Field label="Category" htmlFor="routine-category">
-        <select
-          id="routine-category"
-          className="routine-editor__select"
-          value={category}
-          onChange={(event) => setCategory(event.target.value)}
-        >
-          <option value="">None</option>
-          {CATEGORY_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option.charAt(0).toUpperCase() + option.slice(1)}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <Select
+        label="Category"
+        placeholder="None"
+        clearable
+        data={CATEGORY_OPTIONS.map((option) => ({
+          value: option,
+          label: option.charAt(0).toUpperCase() + option.slice(1),
+        }))}
+        value={category === '' ? null : category}
+        onChange={(value) => setCategory(value ?? '')}
+      />
 
-      <div className="routine-editor__weekdays">
-        <span className="routine-editor__weekdays-label">Days</span>
-        <div className="weekday-toggle">
-          {WEEKDAY_LABELS.map((label, day) => {
-            const isActive = daysOfWeek.includes(day);
-            return (
-              <button
-                key={day}
-                type="button"
-                className={`weekday-toggle__day${isActive ? ' weekday-toggle__day--active' : ''}`}
-                aria-pressed={isActive}
-                aria-label={
-                  ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day]
-                }
-                onClick={() => toggleDay(day)}
-              >
+      <Stack gap={6}>
+        <Text size="sm" fw={500}>
+          Days
+        </Text>
+        <Chip.Group multiple value={daysOfWeek.map(String)} onChange={toggleDays}>
+          <Group gap="xs">
+            {WEEKDAY_LABELS.map((label, day) => (
+              <Chip key={day} value={String(day)} aria-label={WEEKDAY_FULL_NAMES[day]}>
                 {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+              </Chip>
+            ))}
+          </Group>
+        </Chip.Group>
+      </Stack>
 
-      <Field label="Time of day (optional)" htmlFor="routine-time-of-day">
-        <input
-          id="routine-time-of-day"
-          type="time"
-          className="routine-editor__input"
-          value={timeOfDay}
-          onChange={(event) => setTimeOfDay(event.target.value)}
+      <TextInput
+        type="time"
+        label="Time of day"
+        description="Leave empty for an all-day routine"
+        value={timeOfDay}
+        onChange={(event) => setTimeOfDay(event.currentTarget.value)}
+      />
+
+      <Group grow gap="sm">
+        <NumberInput
+          label="Default sets"
+          value={defaultSets}
+          onChange={(value) => setDefaultSets(typeof value === 'number' ? value : undefined)}
+          min={0}
+          step={1}
+          allowDecimal={false}
         />
-      </Field>
+        <NumberInput
+          label="Default reps"
+          value={defaultReps}
+          onChange={(value) => setDefaultReps(typeof value === 'number' ? value : undefined)}
+          min={0}
+          step={1}
+          allowDecimal={false}
+        />
+      </Group>
 
-      <div className="routine-editor__defaults">
-        <Stepper label="Default sets" value={defaultSets} onChange={setDefaultSets} min={0} />
-        <Stepper label="Default reps" value={defaultReps} onChange={setDefaultReps} min={0} />
-      </div>
+      <Stack gap="sm">
+        <Text size="sm" fw={700} c="dimmed" tt="uppercase">
+          Exercises
+        </Text>
 
-      <div className="routine-editor__items">
-        <span className="routine-editor__items-label">Exercises</span>
         {items.length === 0 ? (
-          <p className="routine-editor__items-empty">No exercises yet — add one below.</p>
+          <Text c="dimmed" size="sm">
+            No exercises yet — add one below.
+          </Text>
         ) : (
-          <ul className="routine-item-rows">
+          <Stack gap="sm">
             {items.map((item, index) => (
               <RoutineItemRow
                 key={item.clientId}
@@ -280,39 +289,48 @@ export function RoutineEditorScreen() {
                 onRemove={() => removeItem(item.clientId)}
               />
             ))}
-          </ul>
+          </Stack>
         )}
 
         <ExerciseTypeahead onPick={addItem} placeholder="Add exercise" />
-      </div>
+      </Stack>
 
-      <div className="routine-editor__actions">
-        <Button variant="primary" size="lg" onClick={() => void handleSave()} disabled={saving}>
+      <div
+        style={{
+          position: 'sticky',
+          bottom: 'calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px) + var(--space-3))',
+          zIndex: 10,
+          background: 'var(--mantine-color-body)',
+          paddingTop: 'var(--space-3)',
+          paddingBottom: 'var(--space-3)',
+        }}
+      >
+        <Button size="lg" fullWidth onClick={() => void handleSave()} loading={saving}>
           Save
         </Button>
       </div>
 
       {isEditingExisting ? (
-        <div className="routine-editor__danger-zone">
-          <Button variant="danger" onClick={() => setDeleteModalOpen(true)}>
-            Delete routine
-          </Button>
-        </div>
+        <Button color="red" variant="light" onClick={() => setDeleteModalOpen(true)}>
+          Delete routine
+        </Button>
       ) : null}
 
-      <Modal open={deleteModalOpen} title="Delete routine?" onClose={() => setDeleteModalOpen(false)}>
-        <p className="routine-editor__delete-body">
-          Delete routine? Workout history is not affected.
-        </p>
-        <div className="routine-editor__delete-actions">
-          <Button variant="danger" onClick={() => void handleDelete()}>
-            Delete
-          </Button>
-          <Button variant="ghost" onClick={() => setDeleteModalOpen(false)}>
-            Cancel
-          </Button>
-        </div>
+      <Modal opened={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} title="Delete routine?">
+        <Stack gap="md">
+          <Text c="dimmed" size="sm">
+            Delete routine? Workout history is not affected.
+          </Text>
+          <Group grow>
+            <Button variant="default" onClick={() => setDeleteModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button color="red" onClick={() => void handleDelete()}>
+              Delete
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
-    </div>
+    </Stack>
   );
 }

@@ -1,6 +1,5 @@
+import { Button, Modal, Stack, Text } from '@mantine/core';
 import type { Session } from '../../domain/types';
-import { Modal } from '../common/Modal';
-import { Button } from '../common/Button';
 
 export type StartConflictModalProps = {
   open: boolean;
@@ -17,21 +16,23 @@ export function StartConflictModal({ open, draft, onResume, onReplace, onCancel 
       : 'Quick session';
 
   return (
-    <Modal open={open} title="Draft in progress" onClose={onCancel}>
-      <p className="start-conflict__body">
-        You have an unfinished session ({routineNames}). Resume it, or close it and start a new one.
-      </p>
-      <div className="start-conflict__actions">
-        <Button variant="primary" onClick={onResume}>
-          Resume draft
-        </Button>
-        <Button variant="danger" onClick={onReplace}>
-          Close and start new
-        </Button>
-        <Button variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
+    <Modal opened={open} onClose={onCancel} title="Draft in progress">
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          You have an unfinished session ({routineNames}). Resume it, or close it and start a new one.
+        </Text>
+        <Stack gap="sm">
+          <Button size="lg" fullWidth onClick={onResume}>
+            Resume draft
+          </Button>
+          <Button size="lg" fullWidth color="red" onClick={onReplace}>
+            Close and start new
+          </Button>
+          <Button size="lg" fullWidth variant="subtle" onClick={onCancel}>
+            Cancel
+          </Button>
+        </Stack>
+      </Stack>
     </Modal>
   );
 }

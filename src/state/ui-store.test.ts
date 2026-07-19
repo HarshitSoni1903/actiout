@@ -1,5 +1,24 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
+import { notifications } from '@mantine/notifications';
 import { useUiStore } from './ui-store';
+
+vi.mock('@mantine/notifications', () => ({
+  notifications: { show: vi.fn() },
+}));
+
+it('showToast shows a notification with the message', () => {
+  useUiStore.getState().showToast('Backup exported.');
+  expect(notifications.show).toHaveBeenCalledWith(
+    expect.objectContaining({ message: 'Backup exported.', color: 'actiGreen' })
+  );
+});
+
+it('showToast shows a red notification for error kind', () => {
+  useUiStore.getState().showToast('Could not export backup.', 'error');
+  expect(notifications.show).toHaveBeenCalledWith(
+    expect.objectContaining({ message: 'Could not export backup.', color: 'red' })
+  );
+});
 
 it('startRestTimer sets restTimer with the itemId and a future endsAt', () => {
   const before = Date.now();

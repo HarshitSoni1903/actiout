@@ -1,78 +1,74 @@
-import { useNavigate } from 'react-router-dom';
+import { Fragment } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { Anchor, Badge, Button, Divider, Group, Stack, Text, Title } from '@mantine/core';
 import { listRoutines } from '../../services/routine-service';
-import { Button } from '../common/Button';
-import { EmptyState } from '../common/EmptyState';
-import './routines.css';
-
-const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-function DayDots({ daysOfWeek }: { daysOfWeek: number[] }) {
-  const active = new Set(daysOfWeek);
-  return (
-    <span className="day-dots" aria-hidden="true">
-      {WEEKDAY_LABELS.map((label, index) => (
-        <span
-          key={index}
-          className={`day-dots__dot${active.has(index) ? ' day-dots__dot--active' : ''}`}
-        >
-          {label}
-        </span>
-      ))}
-    </span>
-  );
-}
+import { useStartSession } from '../home/useStartSession';
+import { summaryLine } from './routine-summary';
 
 export function RoutineListScreen() {
   const navigate = useNavigate();
   const routines = useLiveQuery(() => listRoutines(), []);
   const loaded = routines !== undefined;
+  const { attemptStart, conflictModal } = useStartSession();
 
   return (
-    <div className="routine-list">
-      <div className="routine-list__header">
-        <h1 className="routine-list__title">Routines</h1>
-        <Button variant="primary" onClick={() => navigate('/routines/new')}>
-          New routine
-        </Button>
-      </div>
+    <Stack gap="lg">
+      <Stack gap={4}>
+        <Title order={1}>Routines</Title>
+        <Text c="dimmed" size="sm">
+          Create and customize your workouts.
+        </Text>
+      </Stack>
 
-      {loaded && routines.length === 0 ? (
-        <EmptyState
-          title="No routines yet"
-          description="Create a routine to plan your workouts and see it here."
-          action={
-            <Button variant="primary" onClick={() => navigate('/routines/new')}>
-              New routine
-            </Button>
-          }
-        />
-      ) : (
-        <ul className="routine-list__rows">
-          {(routines ?? []).map((routine) => (
-            <li key={routine.id}>
-              <button
-                type="button"
-                className="routine-list__row"
-                onClick={() => navigate(`/routines/${routine.id}`)}
-              >
-                <span className="routine-list__row-main">
-                  <span className="routine-list__name">{routine.name}</span>
-                  {routine.category ? (
-                    <span className="routine-list__category-chip">{routine.category}</span>
+      <Button size="lg" fullWidth onClick={() => navigate('/routines/new')}>
+        + New routine
+      </Button>
+
+      <Stack gap="md">
+        <Text size="sm" fw={700} c="dimmed" tt="uppercase">
+          Your routines
+        </Text>
+
+        {loaded && routines.length === 0 ? (
+          <Text c="dimmed" size="sm">
+            No routines yet. Create one to plan your workouts.
+          </Text>
+        ) : (
+          (routines ?? []).map((routine, index) => (
+            <Fragment key={routine.id}>
+              {index > 0 ? <Divider /> : null}
+              <Stack gap={6}>
+                <Group justify="space-between" align="flex-start" wrap="nowrap">
+                  <Title order={3}>{routine.name}</Title>
+                  {routine.timeOfDay ? (
+                    <Badge variant="light" color="gray">
+                      {routine.timeOfDay}
+                    </Badge>
                   ) : null}
-                </span>
-                <span className="routine-list__row-meta">
-                  <DayDots daysOfWeek={routine.daysOfWeek} />
-                  <span className="routine-list__count">
-                    {routine.items.length} {routine.items.length === 1 ? 'exercise' : 'exercises'}
-                  </span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+                </Group>
+
+                {routine.items.length > 0 ? (
+                  <Text c="dimmed" size="sm">
+                    {summaryLine(routine)}
+                  </Text>
+                ) : null}
+
+                <Group justify="space-between" align="center" wrap="nowrap">
+                  <Button size="lg" onClick={() => void attemptStart([routine.id])}>
+                    Start workout
+                  </Button>
+                  <Anchor component={Link} to={`/routines/${routine.id}`} size="sm" c="dimmed">
+                    Edit
+                  </Anchor>
+                </Group>
+              </Stack>
+            </Fragment>
+          ))
+        )}
+      </Stack>
+
+      {conflictModal}
+    </Stack>
   );
 }

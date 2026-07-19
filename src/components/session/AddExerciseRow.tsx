@@ -5,9 +5,5 @@ export type AddExerciseRowProps = {
 };
 
 export function AddExerciseRow({ onPick }: AddExerciseRowProps) {
-  return (
-    <div className="add-exercise-row">
-      <ExerciseTypeahead onPick={onPick} placeholder="Add exercise" />
-    </div>
-  );
+  return <ExerciseTypeahead onPick={onPick} placeholder="+ Add exercise" />;
 }

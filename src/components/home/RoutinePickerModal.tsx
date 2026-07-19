@@ -1,7 +1,6 @@
 import { useState } from 'react';
+import { Anchor, Button, Modal, Stack, Text } from '@mantine/core';
 import type { RoutineTemplate } from '../../domain/types';
-import { Modal } from '../common/Modal';
-import { Button } from '../common/Button';
 import { RoutineStartRows } from './RoutineStartRows';
 
 // Lists ALL routines (not just today's) so any routine can be started from
@@ -46,23 +45,26 @@ export function RoutinePickerModal({ open, routines, onStart, onClose }: Routine
   };
 
   return (
-    <Modal open={open} title="Start a workout" onClose={handleClose}>
+    <Modal opened={open} onClose={handleClose} title="Start a workout">
       {routines.length === 0 ? (
-        <p className="routine-picker__empty">No routines yet.</p>
+        <Text c="dimmed" size="sm">
+          No routines yet.
+        </Text>
       ) : (
-        <>
-          <div className="routine-picker__header">
-            <button
-              type="button"
-              className="routine-picker__select-link"
-              onClick={() => {
-                setMultiSelect((prev) => !prev);
-                setSelectedIds(new Set());
-              }}
-            >
-              {multiSelect ? 'Cancel' : 'Select multiple'}
-            </button>
-          </div>
+        <Stack gap="md">
+          <Anchor
+            component="button"
+            type="button"
+            size="sm"
+            c="dimmed"
+            style={{ alignSelf: 'flex-end' }}
+            onClick={() => {
+              setMultiSelect((prev) => !prev);
+              setSelectedIds(new Set());
+            }}
+          >
+            {multiSelect ? 'Cancel' : 'Select multiple'}
+          </Anchor>
 
           <RoutineStartRows
             routines={routines}
@@ -74,16 +76,11 @@ export function RoutinePickerModal({ open, routines, onStart, onClose }: Routine
           />
 
           {multiSelect ? (
-            <Button
-              variant="primary"
-              className="routine-picker__start-selected"
-              disabled={selectedIds.size === 0}
-              onClick={() => handleStart(Array.from(selectedIds))}
-            >
+            <Button size="lg" fullWidth disabled={selectedIds.size === 0} onClick={() => handleStart(Array.from(selectedIds))}>
               Start selected
             </Button>
           ) : null}
-        </>
+        </Stack>
       )}
     </Modal>
   );

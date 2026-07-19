@@ -2,7 +2,7 @@ import { it, expect, beforeEach } from 'vitest';
 import { ActiOutDB } from '../db/schema';
 import { getPreferences } from './preference-service';
 import { initializeDb } from '../db/seed';
-import { addSet, updateSet, removeSet, listSetsForItem, isItemComplete } from './session-set-service';
+import { addSet, updateSet, removeSet, listSetsForItem, listSetsForSession, isItemComplete } from './session-set-service';
 import { newId } from '../utils/ids';
 
 let dbx: ActiOutDB;
@@ -48,6 +48,18 @@ it('removeSet renumbers survivors 1..m', async () => {
   const survivors = await listSetsForItem(itemId, dbx);
   expect(survivors.map((s) => s.setNumber)).toEqual([1, 2]);
   expect(survivors.some((s) => s.id === c.id && s.setNumber === 2)).toBe(true);
+});
+
+it('listSetsForSession returns every set in the session sorted by setNumber', async () => {
+  const other = newId();
+  await dbx.sessionItems.add({ id: other, sessionId: (await dbx.sessionItems.get(itemId))!.sessionId, exerciseNameSnapshot: 'Bench', sequencePosition: 2, createdAt: 'a', updatedAt: 'a' } as never);
+  await addSet(itemId, {}, dbx);
+  await addSet(other, {}, dbx);
+  await addSet(itemId, {}, dbx);
+  const sessionId = (await dbx.sessionItems.get(itemId))!.sessionId;
+  const all = await listSetsForSession(sessionId, dbx);
+  expect(all).toHaveLength(3);
+  expect(all.every((s) => s.sessionId === sessionId)).toBe(true);
 });
 
 it('addSet stores durationSeconds', async () => {

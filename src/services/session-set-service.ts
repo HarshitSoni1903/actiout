@@ -95,6 +95,13 @@ export async function listSetsForItem(sessionItemId: string, database: ActiOutDB
   return rows.slice().sort((a, b) => a.setNumber - b.setNumber);
 }
 
+// One-query read of every set in a session — the session screen groups these
+// by sessionItemId to derive per-item completion without N per-item queries.
+export async function listSetsForSession(sessionId: string, database: ActiOutDB = db): Promise<SessionSet[]> {
+  const rows = await database.sessionSets.where('sessionId').equals(sessionId).toArray();
+  return rows.slice().sort((a, b) => a.setNumber - b.setNumber);
+}
+
 export function isItemComplete(sets: SessionSet[]): boolean {
   const work = sets.filter((s) => !s.isWarmup);
   return work.length > 0 && work.every((s) => s.completed);

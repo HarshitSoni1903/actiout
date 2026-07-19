@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { Box, Button, Group, Modal, Stack, Text } from '@mantine/core';
+import type { SessionItem, SessionSet } from '../../domain/types';
 import {
   addSessionItem,
   completeSession,
@@ -12,9 +14,15 @@ import {
   unlockSession,
   updateSessionItem,
 } from '../../services/session-service';
-import { isItemComplete, listSetsForItem } from '../../services/session-set-service';
+import {
+  activateSessionItem,
+  activationNumbers,
+  dnfSessionItem,
+  itemPhase,
+  orderSessionItems,
+} from '../../services/session-flow';
+import { isItemComplete, listSetsForSession } from '../../services/session-set-service';
 import { useUiStore } from '../../state/ui-store';
-import { Button } from '../common/Button';
 import { EmptyState } from '../common/EmptyState';
 import { AddExerciseRow } from './AddExerciseRow';
 import { FinishBar } from './FinishBar';
@@ -32,12 +40,28 @@ async function withErrorToast(action: () => Promise<unknown>, onError: (message:
   }
 }
 
+function groupCompletion(items: SessionItem[], sets: SessionSet[]): Map<string, boolean> {
+  const byItem = new Map<string, SessionSet[]>();
+  for (const set of sets) {
+    const list = byItem.get(set.sessionItemId) ?? [];
+    list.push(set);
+    byItem.set(set.sessionItemId, list);
+  }
+  const complete = new Map<string, boolean>();
+  for (const item of items) {
+    complete.set(item.id, isItemComplete(byItem.get(item.id) ?? []));
+  }
+  return complete;
+}
+
 export function SessionScreen() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const showToast = useUiStore((state) => state.showToast);
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [dnfConfirmOpen, setDnfConfirmOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Wrapped in an object so the hook always resolves to a defined value once
   // settled — distinguishes "still loading" (hook result undefined) from a
@@ -47,15 +71,8 @@ export function SessionScreen() {
     return { session };
   }, [id]);
 
-  const itemIds = result?.session ? result.session.items.map((item) => item.id) : [];
-  const doneCount =
-    useLiveQuery(async () => {
-      if (itemIds.length === 0) {
-        return 0;
-      }
-      const setsPerItem = await Promise.all(itemIds.map((itemId) => listSetsForItem(itemId)));
-      return setsPerItem.filter((sets) => isItemComplete(sets)).length;
-    }, [itemIds.join(',')]) ?? 0;
+  const allSets =
+    useLiveQuery(() => (id ? listSetsForSession(id) : Promise.resolve<SessionSet[]>([])), [id]) ?? [];
 
   if (result === undefined) {
     return <div className="session-screen session-screen--loading" />;
@@ -70,20 +87,48 @@ export function SessionScreen() {
           title="Session not found"
           description="This workout may have been removed."
           action={
-            <Button variant="primary" onClick={() => navigate('/')}>
-              Back to Home
-            </Button>
+            <Button onClick={() => navigate('/')}>Back to Home</Button>
           }
         />
       </div>
     );
   }
 
+  const completeById = groupCompletion(session.items, allSets);
+  const doneCount = [...completeById.values()].filter(Boolean).length;
+  const orderedItems = orderSessionItems(session.items, completeById);
+  const numbers = activationNumbers(session.items);
+
+  const isDraft = session.status === 'draft';
+  // Item-level controls (sets, notes, reorder, remove) are editable for a
+  // draft, or for a completed/dnf session once "Edit" has unlocked it.
+  const itemsEditable = isDraft || editing;
+  // The Add-exercise + Finish footer only ever applies to the active draft
+  // workflow — unlocking a finished session for edits does not resume it.
+  const isReadOnly = !isDraft;
+
   const handleBack = () => {
-    if (session.status === 'draft') {
+    if (isDraft) {
       showToast('Saved as draft');
     }
     navigate('/');
+  };
+
+  const handleToggle = (item: SessionItem) => {
+    const phase = itemPhase(item, completeById.get(item.id) ?? false);
+    // Tapping a queued row in a live draft stamps its activation order, then
+    // opens it. Every other tap (or any tap in a read-only session) merely
+    // toggles the single expanded row.
+    if (isDraft && phase === 'queued') {
+      void withErrorToast(
+        () => activateSessionItem(item.id),
+        (message) => showToast(message, 'error'),
+        'Could not start exercise.'
+      );
+      setExpandedId(item.id);
+      return;
+    }
+    setExpandedId((prev) => (prev === item.id ? null : item.id));
   };
 
   const handleUpdateItem = (itemId: string, patch: SessionItemUpdate) => {
@@ -108,6 +153,15 @@ export function SessionScreen() {
       (message) => showToast(message, 'error'),
       'Could not remove exercise.'
     );
+  };
+
+  const handleDnfItem = (itemId: string) => {
+    void withErrorToast(
+      () => dnfSessionItem(itemId),
+      (message) => showToast(message, 'error'),
+      'Could not update exercise.'
+    );
+    setExpandedId((prev) => (prev === itemId ? null : prev));
   };
 
   const handleAddItem = (name: string) => {
@@ -156,40 +210,31 @@ export function SessionScreen() {
     }
   };
 
-  const isDraft = session.status === 'draft';
-  // Item-level controls (sets, notes, reorder, remove) are editable for a
-  // draft, or for a completed/dnf session once "Edit" has unlocked it.
-  const itemsEditable = isDraft || editing;
-  // The Add-exercise + Finish/DNF footer only ever applies to the active
-  // draft workflow — unlocking a finished session for edits does not resume
-  // that workflow, so the footer (and its bottom padding) stays hidden.
-  const isReadOnly = !isDraft;
-
   return (
     <div className={`session-screen${isReadOnly ? ' session-screen--readonly' : ''}`}>
-      <SessionHeader session={session} onBack={handleBack} />
+      <SessionHeader session={session} onBack={handleBack} onRequestDnf={() => setDnfConfirmOpen(true)} />
 
-      <div className="session-screen__session-actions">
+      <Group justify="flex-end" gap="sm">
         {!isDraft && !editing ? (
-          <Button variant="ghost" onClick={handleEdit}>
+          <Button variant="subtle" size="sm" onClick={handleEdit}>
             Edit
           </Button>
         ) : null}
         {confirmingDelete ? (
-          <span className="session-screen__delete-confirm">
-            <Button variant="danger" onClick={() => void handleDelete()}>
+          <Group gap="xs">
+            <Button color="red" size="sm" onClick={() => void handleDelete()}>
               Confirm delete
             </Button>
-            <Button variant="ghost" onClick={() => setConfirmingDelete(false)}>
+            <Button variant="subtle" size="sm" onClick={() => setConfirmingDelete(false)}>
               Cancel
             </Button>
-          </span>
+          </Group>
         ) : (
-          <Button variant="danger" onClick={() => setConfirmingDelete(true)}>
+          <Button color="red" variant="light" size="sm" onClick={() => setConfirmingDelete(true)}>
             Delete session
           </Button>
         )}
-      </div>
+      </Group>
 
       {session.items.length === 0 ? (
         <EmptyState
@@ -197,45 +242,75 @@ export function SessionScreen() {
           description={isReadOnly ? undefined : 'Add one below to get started.'}
         />
       ) : (
-        <ul className="session-screen__items">
-          {session.items.map((item, index) =>
-            itemsEditable ? (
-              <SessionItemCard
-                key={item.id}
-                item={item}
-                position={index + 1}
-                isFirst={index === 0}
-                isLast={index === session.items.length - 1}
-                onUpdate={(patch) => handleUpdateItem(item.id, patch)}
-                onMoveUp={() => handleMoveItem(item.id, 'up')}
-                onMoveDown={() => handleMoveItem(item.id, 'down')}
-                onRemove={() => handleRemoveItem(item.id)}
-              />
-            ) : (
-              <SessionItemCard
-                key={item.id}
-                item={item}
-                position={index + 1}
-                isFirst={index === 0}
-                isLast={index === session.items.length - 1}
-                readOnly
-              />
-            )
-          )}
-        </ul>
+        <Stack gap="sm">
+          {orderedItems.map((item, index) => {
+            const complete = completeById.get(item.id) ?? false;
+            const rawPhase = itemPhase(item, complete);
+            // A finished (completed/dnf) session logged before the tap-to-
+            // activate feature has no activatedAt, so a done item would read as
+            // "queued" — surface it as finished in the read-only history view.
+            const phase = !isDraft && rawPhase === 'queued' && complete ? 'finished' : rawPhase;
+            return (
+            <SessionItemCard
+              key={item.id}
+              item={item}
+              phase={phase}
+              activationNumber={numbers.get(item.id)}
+              expanded={expandedId === item.id}
+              editable={itemsEditable}
+              isFirst={index === 0}
+              isLast={index === orderedItems.length - 1}
+              onToggle={() => handleToggle(item)}
+              onUpdate={itemsEditable ? (patch) => handleUpdateItem(item.id, patch) : undefined}
+              onMoveUp={itemsEditable ? () => handleMoveItem(item.id, 'up') : undefined}
+              onMoveDown={itemsEditable ? () => handleMoveItem(item.id, 'down') : undefined}
+              onRemove={itemsEditable ? () => handleRemoveItem(item.id) : undefined}
+              onDnf={itemsEditable ? () => handleDnfItem(item.id) : undefined}
+            />
+            );
+          })}
+        </Stack>
       )}
 
       {isReadOnly ? null : (
-        <div className="session-screen__footer safe-bottom">
-          <AddExerciseRow onPick={handleAddItem} />
-          <FinishBar
-            doneCount={doneCount}
-            total={session.items.length}
-            onFinish={() => void handleFinish()}
-            onDnf={() => void handleDnf()}
-          />
-        </div>
+        <Box
+          style={{
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 10,
+            background: 'var(--mantine-color-body)',
+            paddingTop: 'var(--space-3)',
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + var(--space-3))',
+          }}
+        >
+          <Stack gap="sm">
+            <AddExerciseRow onPick={handleAddItem} />
+            <FinishBar doneCount={doneCount} total={session.items.length} onFinish={() => void handleFinish()} />
+          </Stack>
+        </Box>
       )}
+
+      <Modal opened={dnfConfirmOpen} onClose={() => setDnfConfirmOpen(false)} title="Did not finish?">
+        <Stack gap="md">
+          <Text c="dimmed" size="sm">
+            Mark as Did Not Finish? Stays in history, excluded from PRs.
+          </Text>
+          <Group grow>
+            <Button variant="default" onClick={() => setDnfConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              onClick={() => {
+                setDnfConfirmOpen(false);
+                void handleDnf();
+              }}
+            >
+              Mark DNF
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </div>
   );
 }

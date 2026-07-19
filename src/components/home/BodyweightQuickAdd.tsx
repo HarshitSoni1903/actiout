@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { Button, Card, Group, NumberInput, Text } from '@mantine/core';
 import type { WeightUnit } from '../../domain/types';
 import { convertWeight, formatWeight } from '../../domain/units';
 import { formatShortDate } from '../../utils/dates';
-import { Button } from '../common/Button';
-import { Stepper } from '../common/Stepper';
 
 export type BodyweightQuickAddProps = {
   latestValue?: number;
@@ -20,7 +19,6 @@ export function BodyweightQuickAdd({
   preferredUnit,
   onSave,
 }: BodyweightQuickAddProps) {
-  const [expanded, setExpanded] = useState(false);
   const [value, setValue] = useState<number | undefined>(undefined);
   const [saving, setSaving] = useState(false);
 
@@ -31,18 +29,10 @@ export function BodyweightQuickAdd({
         : convertWeight(latestValue, latestUnit, preferredUnit)
       : undefined;
 
-  useEffect(() => {
-    if (expanded) {
-      setValue(displayValue ?? 0);
-    }
-    // Only re-seed when the row is (re-)expanded, not on every latest-value change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded]);
-
   const summary =
     displayValue !== undefined && latestDate
-      ? `Bodyweight — ${formatWeight(displayValue, preferredUnit)}, ${formatShortDate(latestDate)}`
-      : 'Bodyweight — log today';
+      ? `Latest: ${formatWeight(displayValue, preferredUnit)} · ${formatShortDate(latestDate)}`
+      : 'No entries yet';
 
   const handleSave = async () => {
     if (value === undefined || !(value > 0)) {
@@ -51,26 +41,33 @@ export function BodyweightQuickAdd({
     setSaving(true);
     try {
       await onSave(value);
-      setExpanded(false);
+      setValue(undefined);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="bodyweight-quick-add">
-      <button type="button" className="bodyweight-quick-add__row" onClick={() => setExpanded((prev) => !prev)}>
+    <Card withBorder radius="lg" padding="md">
+      <Text size="sm" fw={600}>
+        Bodyweight
+      </Text>
+      <Text size="xs" c="dimmed" mb="sm">
         {summary}
-      </button>
-
-      {expanded ? (
-        <div className="bodyweight-quick-add__form">
-          <Stepper label="Bodyweight" value={value} onChange={setValue} step={0.5} min={1} allowDecimal />
-          <Button variant="primary" onClick={handleSave} disabled={saving || value === undefined}>
-            Save
-          </Button>
-        </div>
-      ) : null}
-    </div>
+      </Text>
+      <Group align="flex-end" gap="sm" wrap="nowrap">
+        <NumberInput
+          label={`Weight (${preferredUnit})`}
+          value={value}
+          onChange={(next) => setValue(typeof next === 'number' ? next : undefined)}
+          min={1}
+          step={0.5}
+          style={{ flex: 1 }}
+        />
+        <Button onClick={() => void handleSave()} disabled={saving || value === undefined}>
+          Save
+        </Button>
+      </Group>
+    </Card>
   );
 }

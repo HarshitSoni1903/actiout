@@ -1,15 +1,22 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
+import { MantineProvider } from '@mantine/core';
+import { Notifications } from '@mantine/notifications';
+import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
 import { initializeDb } from './db/seed';
 import * as bodyweightService from './services/bodyweight-service';
 import * as preferenceService from './services/preference-service';
-import { getPreferences } from './services/preference-service';
 import * as routineService from './services/routine-service';
 import * as sessionService from './services/session-service';
 import { requestPersistentStorage } from './utils/storage';
 import { router } from './app/routes';
-import { applyTheme } from './app/theme';
+import { mantineTheme } from './app/mantine-theme';
 import './app/styles/global.css';
 
 const rootElement = document.getElementById('root');
@@ -26,8 +33,6 @@ try {
 } catch (error) {
   console.error('initializeDb failed; continuing with render anyway', error);
 }
-const preferences = await getPreferences();
-applyTheme(preferences.theme);
 
 // Request persistent storage durability (fire-and-forget; guarded against SSR).
 if (typeof navigator !== 'undefined') {
@@ -54,6 +59,9 @@ if (import.meta.env.DEV) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <MantineProvider theme={mantineTheme} defaultColorScheme="auto">
+      <Notifications position="top-center" />
+      <RouterProvider router={router} />
+    </MantineProvider>
   </StrictMode>
 );
