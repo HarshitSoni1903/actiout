@@ -266,6 +266,7 @@ export function SessionScreen() {
               onMoveDown={itemsEditable ? () => handleMoveItem(item.id, 'down') : undefined}
               onRemove={itemsEditable ? () => handleRemoveItem(item.id) : undefined}
               onDnf={itemsEditable ? () => handleDnfItem(item.id) : undefined}
+              onCompleted={() => setExpandedId(null)}
             />
             );
           })}

@@ -1,12 +1,38 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Box, Button, Card, Collapse, Group, Text, ThemeIcon, UnstyledButton } from '@mantine/core';
-import { IconCheck, IconClock, IconX } from '@tabler/icons-react';
-import type { SessionItem, SessionSet } from '../../domain/types';
+import {
+  ActionIcon,
+  Box,
+  Button,
+  Card,
+  Collapse,
+  Group,
+  NumberInput,
+  SegmentedControl,
+  Stack,
+  Text,
+  Textarea,
+  ThemeIcon,
+  UnstyledButton,
+} from '@mantine/core';
+import {
+  IconCheck,
+  IconChevronDown,
+  IconChevronUp,
+  IconClock,
+  IconPlus,
+  IconX,
+} from '@tabler/icons-react';
+import type { SessionItem, SessionSet, WeightUnit } from '../../domain/types';
 import type { ItemPhase } from '../../services/session-flow';
+import { applyAggregateSets } from '../../services/session-flow';
 import { getLastPerformance } from '../../services/analytics-service';
 import { addSet, listSetsForItem, removeSet, updateSet } from '../../services/session-set-service';
+import { getPreferences } from '../../services/preference-service';
 import { useUiStore } from '../../state/ui-store';
+import { computeAggregatePrefill, type AggregateDraft } from './aggregate-prefill';
+import { SetRow, type SetRowPatch } from './SetRow';
+import { RestTimerBar } from './RestTimerBar';
 
 export type SessionItemUpdate = Partial<Pick<SessionItem, 'notes'>>;
 
@@ -27,9 +53,10 @@ export type SessionItemCardProps = {
   onMoveDown?(): void;
   onRemove?(): void;
   onDnf?(): void;
+  // Basic-mode "Completed" collapses the card; SessionScreen wires this to
+  // setExpandedId(null). Float-up happens on its own via liveQuery.
+  onCompleted?(): void;
 };
-
-type SetPatch = Partial<Pick<SessionSet, 'reps' | 'weight' | 'isWarmup' | 'completed'>>;
 
 type LastPerformance = Awaited<ReturnType<typeof getLastPerformance>>;
 
@@ -91,21 +118,41 @@ export function SessionItemCard({
   onMoveDown,
   onRemove,
   onDnf,
+  onCompleted,
 }: SessionItemCardProps) {
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [notesDraft, setNotesDraft] = useState(item.notes ?? '');
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [perSetOpen, setPerSetOpen] = useState(false);
+  const [draft, setDraft] = useState<AggregateDraft | null>(null);
   const notesId = useId();
   const startRestTimer = useUiStore((state) => state.startRestTimer);
+  const clearRestTimer = useUiStore((state) => state.clearRestTimer);
+  const restTimer = useUiStore((state) => state.restTimer);
+  const showToast = useUiStore((state) => state.showToast);
 
   const sets = useLiveQuery(() => listSetsForItem(item.id), [item.id]) ?? [];
   const lastPerformance = useLiveQuery(
     () => getLastPerformance(item.exerciseNameSnapshot),
     [item.exerciseNameSnapshot]
   );
+  const preferences = useLiveQuery(() => getPreferences(), []);
+  const mode = preferences?.loggingMode ?? 'basic';
+  const preferenceUnit: WeightUnit = preferences?.weightUnit ?? 'lb';
 
   const summary = buildSummary(item, lastPerformance);
   const isDnf = item.dnfAt !== undefined;
+
+  // Prefill the basic-mode aggregate draft when the card opens; reset on close
+  // so the next open recomputes. Once seeded we never clobber user edits, but
+  // we still fill in if liveQuery data lands after the open (prev ?? …).
+  useEffect(() => {
+    if (!expanded) {
+      setDraft(null);
+      return;
+    }
+    setDraft((prev) => prev ?? computeAggregatePrefill(item, lastPerformance, preferenceUnit));
+  }, [expanded, lastPerformance, preferenceUnit, item.setsPlanned, item.repsPlanned]);
 
   function expandNotes() {
     setNotesDraft(item.notes ?? '');
@@ -126,12 +173,48 @@ export function SessionItemCard({
     void removeSet(setId);
   }
 
-  function handleSetChange(set: SessionSet, patch: SetPatch) {
+  function handleSetChange(set: SessionSet, patch: SetRowPatch) {
     void updateSet(set.id, patch);
     if (patch.completed === true && item.restSeconds) {
       startRestTimer(item.id, item.restSeconds);
     }
   }
+
+  async function handleCompleted() {
+    if (!draft) {
+      return;
+    }
+    try {
+      await applyAggregateSets(item.id, {
+        sets: draft.sets,
+        reps: draft.reps,
+        weight: draft.weight,
+        weightUnit: draft.weightUnit,
+      });
+      if (item.restSeconds) {
+        startRestTimer(item.id, item.restSeconds);
+      }
+      onCompleted?.();
+    } catch {
+      showToast('Could not save sets.', 'error');
+    }
+  }
+
+  const setEditor = (
+    <Stack gap="xs">
+      {sets.map((set) => (
+        <SetRow
+          key={set.id}
+          set={set}
+          onChange={(patch) => handleSetChange(set, patch)}
+          onRemove={() => handleRemoveSet(set.id)}
+        />
+      ))}
+      <Button variant="light" size="xs" leftSection={<IconPlus size={14} />} onClick={handleAddSet}>
+        Add set
+      </Button>
+    </Stack>
+  );
 
   return (
     <Card withBorder radius="lg" padding="xs" style={phase === 'finished' ? { opacity: 0.72 } : undefined}>
@@ -164,139 +247,165 @@ export function SessionItemCard({
 
       <Collapse in={expanded}>
         <Box px="xs" pb="xs" pt="sm">
-          <div className="session-item-card__sets">
-            {sets.map((set) =>
-              !editable ? (
-                <p key={set.id} className="session-item-card__set-row-readonly">
+          {!editable ? (
+            <Stack gap={4}>
+              {sets.map((set) => (
+                <Text key={set.id} size="sm">
                   Set {set.setNumber}: {set.reps ?? '-'} reps &times; {set.weight ?? '-'} {set.weightUnit}
                   {set.isWarmup ? ' (warmup)' : ''}
                   {set.completed ? ' ✓' : ''}
-                </p>
-              ) : (
-                <div key={set.id} className="session-item-card__set-row">
-                  <span className="session-item-card__set-number">{set.setNumber}</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    aria-label={`Set ${set.setNumber} reps`}
-                    value={set.reps ?? ''}
-                    onChange={(event) =>
-                      handleSetChange(set, { reps: event.target.value === '' ? undefined : Number(event.target.value) })
-                    }
-                  />
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    aria-label={`Set ${set.setNumber} weight`}
-                    value={set.weight ?? ''}
-                    onChange={(event) =>
-                      handleSetChange(set, {
-                        weight: event.target.value === '' ? undefined : Number(event.target.value),
-                      })
-                    }
-                  />
-                  <span className="session-item-card__set-unit">{set.weightUnit}</span>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={set.isWarmup}
-                      onChange={(event) => handleSetChange(set, { isWarmup: event.target.checked })}
-                    />
-                    Warmup
-                  </label>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={set.completed}
-                      onChange={(event) => handleSetChange(set, { completed: event.target.checked })}
-                    />
-                    Done
-                  </label>
-                  <button
-                    type="button"
-                    aria-label={`Remove set ${set.setNumber}`}
-                    onClick={() => handleRemoveSet(set.id)}
-                  >
-                    &times;
-                  </button>
-                </div>
-              )
-            )}
-          </div>
+                </Text>
+              ))}
+              {item.notes ? (
+                <Text size="sm" c="dimmed">
+                  {item.notes}
+                </Text>
+              ) : null}
+            </Stack>
+          ) : mode === 'basic' ? (
+            <Stack gap="sm">
+              {summary ? (
+                <Text size="xs" c="dimmed">
+                  Prev: {summary}
+                </Text>
+              ) : null}
+              <Group gap="xs" wrap="nowrap" align="flex-end">
+                <NumberInput
+                  size="sm"
+                  label="Sets"
+                  aria-label={`${item.exerciseNameSnapshot} sets`}
+                  min={1}
+                  step={1}
+                  allowDecimal={false}
+                  value={draft?.sets}
+                  onChange={(value) =>
+                    setDraft((d) => (d ? { ...d, sets: typeof value === 'number' ? value : 1 } : d))
+                  }
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <NumberInput
+                  size="sm"
+                  label="Reps"
+                  aria-label={`${item.exerciseNameSnapshot} reps`}
+                  min={0}
+                  step={1}
+                  allowDecimal={false}
+                  value={draft?.reps}
+                  onChange={(value) =>
+                    setDraft((d) => (d ? { ...d, reps: typeof value === 'number' ? value : undefined } : d))
+                  }
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <NumberInput
+                  size="sm"
+                  label="Weight"
+                  aria-label={`${item.exerciseNameSnapshot} weight`}
+                  min={0}
+                  step={draft?.weightUnit === 'kg' ? 1 : 5}
+                  value={draft?.weight}
+                  onChange={(value) =>
+                    setDraft((d) => (d ? { ...d, weight: typeof value === 'number' ? value : undefined } : d))
+                  }
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <SegmentedControl
+                  size="sm"
+                  data={['lb', 'kg']}
+                  value={draft?.weightUnit ?? preferenceUnit}
+                  onChange={(value) =>
+                    setDraft((d) => (d ? { ...d, weightUnit: value as WeightUnit } : d))
+                  }
+                />
+              </Group>
+              <Button color="actiGreen" fullWidth onClick={() => void handleCompleted()}>
+                Completed
+              </Button>
+
+              <UnstyledButton onClick={() => setPerSetOpen((open) => !open)} aria-expanded={perSetOpen}>
+                <Group gap={4} align="center">
+                  <Text size="xs" c="dimmed">
+                    Adjust individual sets
+                  </Text>
+                  {perSetOpen ? (
+                    <IconChevronUp size={14} color="var(--mantine-color-dimmed)" />
+                  ) : (
+                    <IconChevronDown size={14} color="var(--mantine-color-dimmed)" />
+                  )}
+                </Group>
+              </UnstyledButton>
+              <Collapse in={perSetOpen}>{setEditor}</Collapse>
+            </Stack>
+          ) : (
+            setEditor
+          )}
 
           {editable ? (
-            <button type="button" className="session-item-card__add-set-btn" onClick={handleAddSet}>
-              Add set
-            </button>
-          ) : null}
-
-          {editable ? (
-            <div className="session-item-card__notes">
+            <Box mt="sm">
               {notesExpanded ? (
-                <textarea
+                <Textarea
                   id={notesId}
                   name={notesId}
-                  className="session-item-card__notes-input"
+                  autosize
+                  minRows={2}
                   autoFocus
                   value={notesDraft}
-                  onChange={(event) => setNotesDraft(event.target.value)}
+                  onChange={(event) => setNotesDraft(event.currentTarget.value)}
                   onBlur={commitNotes}
                   placeholder="Notes"
                   aria-label={`Notes for ${item.exerciseNameSnapshot}`}
                 />
               ) : (
-                <button type="button" className="session-item-card__notes-toggle" onClick={expandNotes}>
-                  {item.notes ? item.notes : 'Add note'}
-                </button>
+                <UnstyledButton onClick={expandNotes} style={{ width: '100%' }}>
+                  <Text size="sm" c="dimmed" ta="left">
+                    {item.notes ? item.notes : 'Add note'}
+                  </Text>
+                </UnstyledButton>
               )}
-            </div>
+            </Box>
           ) : null}
-
-          {!editable && item.notes ? <p className="session-item-card__notes-readonly">{item.notes}</p> : null}
 
           {editable ? (
             <Group justify="space-between" align="center" mt="sm" wrap="nowrap">
               <Group gap="xs" wrap="nowrap">
-                <button
-                  type="button"
-                  className="session-item-card__reorder-btn"
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="lg"
                   aria-label={`Move ${item.exerciseNameSnapshot} up`}
                   disabled={isFirst}
                   onClick={onMoveUp}
                 >
-                  &#9650;
-                </button>
-                <button
-                  type="button"
-                  className="session-item-card__reorder-btn"
+                  <IconChevronUp size={18} />
+                </ActionIcon>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="lg"
                   aria-label={`Move ${item.exerciseNameSnapshot} down`}
                   disabled={isLast}
                   onClick={onMoveDown}
                 >
-                  &#9660;
-                </button>
+                  <IconChevronDown size={18} />
+                </ActionIcon>
                 {confirmingRemove ? (
-                  <span className="session-item-card__confirm">
-                    <button type="button" className="session-item-card__confirm-btn" onClick={onRemove}>
+                  <Group gap="xs" wrap="nowrap">
+                    <Button variant="light" color="red" size="xs" onClick={onRemove}>
                       Remove
-                    </button>
-                    <button
-                      type="button"
-                      className="session-item-card__cancel-btn"
-                      onClick={() => setConfirmingRemove(false)}
-                    >
+                    </Button>
+                    <Button variant="subtle" color="gray" size="xs" onClick={() => setConfirmingRemove(false)}>
                       Cancel
-                    </button>
-                  </span>
+                    </Button>
+                  </Group>
                 ) : (
-                  <button
-                    type="button"
-                    className="session-item-card__remove-btn"
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    size="lg"
                     aria-label={`Remove ${item.exerciseNameSnapshot}`}
                     onClick={() => setConfirmingRemove(true)}
                   >
-                    &times;
-                  </button>
+                    <IconX size={18} />
+                  </ActionIcon>
                 )}
               </Group>
               {onDnf ? (
@@ -308,6 +417,14 @@ export function SessionItemCard({
           ) : null}
         </Box>
       </Collapse>
+
+      {restTimer && restTimer.itemId === item.id && restTimer.endsAt > Date.now() ? (
+        <RestTimerBar
+          endsAt={restTimer.endsAt}
+          totalSeconds={item.restSeconds ?? 0}
+          onClear={clearRestTimer}
+        />
+      ) : null}
     </Card>
   );
 }

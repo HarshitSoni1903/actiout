@@ -1,6 +1,6 @@
 /* Session screen — full-screen live workout logging (no TabBar).
-   Card shell, header and footer are Mantine primitives; the rules below style
-   only the interim expanded per-set body (replaced wholesale in C3). */
+   Card shell, header, body and footer are all Mantine primitives now; only the
+   screen-level layout lives here. */
 
 .session-screen {
   display: flex;
@@ -11,74 +11,4 @@
 
 .session-screen--loading {
   min-height: 100dvh;
-}
-
-/* Interim expanded body — notes */
-
-.session-item-card__notes-toggle {
-  width: 100%;
-  min-height: var(--touch-target);
-  padding: 0 var(--space-2);
-  text-align: left;
-  color: var(--color-text-muted);
-  font-size: 13px;
-}
-
-.session-item-card__notes-input {
-  width: 100%;
-  min-height: 72px;
-  padding: var(--space-2);
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  color: var(--color-text);
-  font-size: 14px;
-  resize: vertical;
-}
-
-.session-item-card__notes-readonly {
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-/* Interim expanded body — reorder / remove controls */
-
-.session-item-card__reorder-btn,
-.session-item-card__remove-btn {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  border-radius: var(--radius);
-}
-
-.session-item-card__remove-btn {
-  font-size: 18px;
-  color: var(--color-danger);
-}
-
-.session-item-card__confirm {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.session-item-card__confirm-btn {
-  min-height: 36px;
-  padding: 0 var(--space-2);
-  color: var(--color-danger);
-  font-size: 13px;
-  font-weight: 600;
-  border: 1px solid var(--color-danger);
-  border-radius: var(--radius);
-}
-
-.session-item-card__cancel-btn {
-  min-height: 36px;
-  padding: 0 var(--space-2);
-  color: var(--color-text-muted);
-  font-size: 13px;
 }
