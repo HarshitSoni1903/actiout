@@ -32,6 +32,7 @@ import { getPreferences } from '../../services/preference-service';
 import { useUiStore } from '../../state/ui-store';
 import { computeAggregatePrefill, type AggregateDraft } from './aggregate-prefill';
 import { SetRow, type SetRowPatch } from './SetRow';
+import { SetRowTimer } from './SetRowTimer';
 import { RestTimerBar } from './RestTimerBar';
 
 export type SessionItemUpdate = Partial<Pick<SessionItem, 'notes'>>;
@@ -208,6 +209,7 @@ export function SessionItemCard({
           set={set}
           onChange={(patch) => handleSetChange(set, patch)}
           onRemove={() => handleRemoveSet(set.id)}
+          timerSlot={<SetRowTimer set={set} />}
         />
       ))}
       <Button variant="light" size="xs" leftSection={<IconPlus size={14} />} onClick={handleAddSet}>
