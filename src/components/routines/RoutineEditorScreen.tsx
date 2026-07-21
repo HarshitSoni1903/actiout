@@ -14,13 +14,23 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { RoutineInput, RoutineItemInput } from '../../services/routine-service';
 import { createRoutine, deleteRoutine, getRoutine, updateRoutine } from '../../services/routine-service';
 import { getPreferences } from '../../services/preference-service';
 import { useUiStore } from '../../state/ui-store';
 import { newId } from '../../utils/ids';
 import { ExerciseTypeahead } from './ExerciseTypeahead';
-import { RoutineItemRow } from './RoutineItemRow';
+import { SortableRoutineRow } from './SortableRoutineRow';
 
 const CATEGORY_OPTIONS = [
   'chest',
@@ -63,6 +73,10 @@ export function RoutineEditorScreen() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const notesRef = useRef<string | undefined>(undefined);
   const initializedRef = useRef(false);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   // Editor state is local until Save — seed it once from the loaded routine
   // (not on every live-query refresh, which would clobber in-progress edits).
@@ -115,17 +129,18 @@ export function RoutineEditorScreen() {
     setItems((prev) => prev.filter((item) => item.clientId !== clientId));
   }
 
-  function moveItem(index: number, direction: -1 | 1) {
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
     setItems((prev) => {
-      const targetIndex = index + direction;
-      if (targetIndex < 0 || targetIndex >= prev.length) {
+      const oldIndex = prev.findIndex((item) => item.clientId === active.id);
+      const newIndex = prev.findIndex((item) => item.clientId === over.id);
+      if (oldIndex === -1 || newIndex === -1) {
         return prev;
       }
-      const next = prev.slice();
-      const temp = next[index] as EditorItem;
-      next[index] = next[targetIndex] as EditorItem;
-      next[targetIndex] = temp;
-      return next;
+      return arrayMove(prev, oldIndex, newIndex);
     });
   }
 
@@ -274,22 +289,23 @@ export function RoutineEditorScreen() {
             No exercises yet — add one below.
           </Text>
         ) : (
-          <Stack gap="sm">
-            {items.map((item, index) => (
-              <RoutineItemRow
-                key={item.clientId}
-                item={item}
-                position={index + 1}
-                isFirst={index === 0}
-                isLast={index === items.length - 1}
-                weightUnit={weightUnit}
-                onChange={(patch) => updateItem(item.clientId, patch)}
-                onMoveUp={() => moveItem(index, -1)}
-                onMoveDown={() => moveItem(index, 1)}
-                onRemove={() => removeItem(item.clientId)}
-              />
-            ))}
-          </Stack>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={items.map((item) => item.clientId)} strategy={verticalListSortingStrategy}>
+              <Stack gap="sm">
+                {items.map((item, index) => (
+                  <SortableRoutineRow
+                    key={item.clientId}
+                    clientId={item.clientId}
+                    item={item}
+                    position={index + 1}
+                    weightUnit={weightUnit}
+                    onChange={(patch) => updateItem(item.clientId, patch)}
+                    onRemove={() => removeItem(item.clientId)}
+                  />
+                ))}
+              </Stack>
+            </SortableContext>
+          </DndContext>
         )}
 
         <ExerciseTypeahead onPick={addItem} placeholder="Add exercise" />

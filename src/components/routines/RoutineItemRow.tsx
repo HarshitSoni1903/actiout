@@ -1,5 +1,6 @@
+import type { ReactNode } from 'react';
 import { ActionIcon, Card, Group, NumberInput, SegmentedControl, Stack, Text, Textarea } from '@mantine/core';
-import { IconChevronDown, IconChevronUp, IconTrash } from '@tabler/icons-react';
+import { IconTrash } from '@tabler/icons-react';
 import type { WeightUnit } from '../../domain/types';
 
 export type RoutineItemRowValue = {
@@ -15,25 +16,22 @@ export type RoutineItemRowValue = {
 export type RoutineItemRowProps = {
   item: RoutineItemRowValue;
   position: number;
-  isFirst: boolean;
-  isLast: boolean;
   weightUnit: WeightUnit;
   onChange(patch: Partial<RoutineItemRowValue>): void;
-  onMoveUp(): void;
-  onMoveDown(): void;
   onRemove(): void;
+  // Drag handle rendered at the left of the header, before the position
+  // number; listeners/attributes live on the handle so the row's inputs
+  // (and the drag itself) don't fight each other.
+  dragHandle?: ReactNode;
 };
 
 export function RoutineItemRow({
   item,
   position,
-  isFirst,
-  isLast,
   weightUnit,
   onChange,
-  onMoveUp,
-  onMoveDown,
   onRemove,
+  dragHandle,
 }: RoutineItemRowProps) {
   const effectiveWeightUnit = item.defaultWeightUnit ?? weightUnit;
 
@@ -42,6 +40,7 @@ export function RoutineItemRow({
       <Stack gap="sm">
         <Group justify="space-between" align="center" wrap="nowrap">
           <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+            {dragHandle}
             <Text size="xs" c="dimmed" fw={700}>
               {position}
             </Text>
@@ -51,22 +50,6 @@ export function RoutineItemRow({
           </Group>
 
           <Group gap={4} wrap="nowrap">
-            <ActionIcon
-              variant="subtle"
-              aria-label={`Move ${item.exerciseName} up`}
-              disabled={isFirst}
-              onClick={onMoveUp}
-            >
-              <IconChevronUp size={18} />
-            </ActionIcon>
-            <ActionIcon
-              variant="subtle"
-              aria-label={`Move ${item.exerciseName} down`}
-              disabled={isLast}
-              onClick={onMoveDown}
-            >
-              <IconChevronDown size={18} />
-            </ActionIcon>
             <ActionIcon
               color="red"
               variant="subtle"

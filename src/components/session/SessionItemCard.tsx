@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   ActionIcon,
@@ -46,17 +46,17 @@ export type SessionItemCardProps = {
   // Per-set editing, reorder, notes and the per-exercise DNF button only show
   // when the session is a live draft (or a finished session unlocked for edits).
   editable: boolean;
-  isFirst: boolean;
-  isLast: boolean;
   onToggle(): void;
   onUpdate?(patch: SessionItemUpdate): void;
-  onMoveUp?(): void;
-  onMoveDown?(): void;
   onRemove?(): void;
   onDnf?(): void;
   // Basic-mode "Completed" collapses the card; SessionScreen wires this to
   // setExpandedId(null). Float-up happens on its own via liveQuery.
   onCompleted?(): void;
+  // Drag handle rendered at the left edge of the header row (queued items in
+  // a live draft only); listeners/attributes live on the handle so tapping
+  // the card body still toggles it.
+  dragHandle?: ReactNode;
 };
 
 type LastPerformance = Awaited<ReturnType<typeof getLastPerformance>>;
@@ -111,15 +111,12 @@ export function SessionItemCard({
   activationNumber,
   expanded,
   editable,
-  isFirst,
-  isLast,
   onToggle,
   onUpdate,
-  onMoveUp,
-  onMoveDown,
   onRemove,
   onDnf,
   onCompleted,
+  dragHandle,
 }: SessionItemCardProps) {
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [notesDraft, setNotesDraft] = useState(item.notes ?? '');
@@ -220,32 +217,35 @@ export function SessionItemCard({
 
   return (
     <Card withBorder radius="lg" padding="xs" style={phase === 'finished' ? { opacity: 0.72 } : undefined}>
-      <UnstyledButton
-        onClick={onToggle}
-        aria-expanded={expanded}
-        style={{ width: '100%', padding: 'var(--space-2)' }}
-      >
-        <Group wrap="nowrap" gap="sm" align="center">
-          <ThemeIcon variant="default" radius="xl" size={30} c="var(--mantine-color-text)">
-            {activationNumber !== undefined ? (
-              <Text size="xs" fw={700}>
-                {activationNumber}
+      <Group wrap="nowrap" gap={0} align="center">
+        {dragHandle}
+        <UnstyledButton
+          onClick={onToggle}
+          aria-expanded={expanded}
+          style={{ flex: 1, minWidth: 0, padding: 'var(--space-2)' }}
+        >
+          <Group wrap="nowrap" gap="sm" align="center">
+            <ThemeIcon variant="default" radius="xl" size={30} c="var(--mantine-color-text)">
+              {activationNumber !== undefined ? (
+                <Text size="xs" fw={700}>
+                  {activationNumber}
+                </Text>
+              ) : null}
+            </ThemeIcon>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Text fw={600} truncate>
+                {item.exerciseNameSnapshot}
               </Text>
-            ) : null}
-          </ThemeIcon>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <Text fw={600} truncate>
-              {item.exerciseNameSnapshot}
-            </Text>
-            {summary ? (
-              <Text size="sm" c="dimmed" truncate>
-                {summary}
-              </Text>
-            ) : null}
-          </div>
-          <StatusIcon phase={phase} isDnf={isDnf} />
-        </Group>
-      </UnstyledButton>
+              {summary ? (
+                <Text size="sm" c="dimmed" truncate>
+                  {summary}
+                </Text>
+              ) : null}
+            </div>
+            <StatusIcon phase={phase} isDnf={isDnf} />
+          </Group>
+        </UnstyledButton>
+      </Group>
 
       <Collapse in={expanded}>
         <Box px="xs" pb="xs" pt="sm">
@@ -369,26 +369,6 @@ export function SessionItemCard({
           {editable ? (
             <Group justify="space-between" align="center" mt="sm" wrap="nowrap">
               <Group gap="xs" wrap="nowrap">
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  size="lg"
-                  aria-label={`Move ${item.exerciseNameSnapshot} up`}
-                  disabled={isFirst}
-                  onClick={onMoveUp}
-                >
-                  <IconChevronUp size={18} />
-                </ActionIcon>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  size="lg"
-                  aria-label={`Move ${item.exerciseNameSnapshot} down`}
-                  disabled={isLast}
-                  onClick={onMoveDown}
-                >
-                  <IconChevronDown size={18} />
-                </ActionIcon>
                 {confirmingRemove ? (
                   <Group gap="xs" wrap="nowrap">
                     <Button variant="light" color="red" size="xs" onClick={onRemove}>

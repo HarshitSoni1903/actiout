@@ -15,6 +15,7 @@ import {
   listSessions,
   moveSessionItem,
   removeSessionItem,
+  reorderSessionItems,
   startQuickSession,
   startSession,
   unlockSession,
@@ -243,6 +244,36 @@ describe('moveSessionItem', () => {
     await moveSessionItem(c!.id, 'down', dbx);
     refreshed = await getSession(session.id, dbx);
     expect(refreshed!.items.map((i) => i.sequencePosition)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('reorderSessionItems', () => {
+  it('renumbers sequencePosition 1..N to match an arbitrary full permutation', async () => {
+    const push = await createRoutine(pushInput(), dbx);
+    const session = await startSession([push.id], undefined, dbx);
+    const [a, b, c] = session.items; // Bench(1), OHP(2), Lateral(3)
+
+    // Move last to first: [Lateral, Bench, OHP]
+    await reorderSessionItems(session.id, [c!.id, a!.id, b!.id], dbx);
+
+    const refreshed = await getSession(session.id, dbx);
+    expect(refreshed!.items.map((i) => i.exerciseNameSnapshot)).toEqual([
+      'Lateral Raise',
+      'Bench Press',
+      'Overhead Press',
+    ]);
+    expect(refreshed!.items.map((i) => i.sequencePosition)).toEqual([1, 2, 3]);
+  });
+
+  it('throws when the id list is not a full permutation of the session items', async () => {
+    const push = await createRoutine(pushInput(), dbx);
+    const session = await startSession([push.id], undefined, dbx);
+    const [a, b] = session.items;
+
+    // Missing one id.
+    await expect(reorderSessionItems(session.id, [a!.id, b!.id], dbx)).rejects.toThrow();
+    // Duplicate / unknown id.
+    await expect(reorderSessionItems(session.id, [a!.id, a!.id, 'nope'], dbx)).rejects.toThrow();
   });
 });
 

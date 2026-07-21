@@ -237,6 +237,45 @@ export async function moveSessionItem(
   });
 }
 
+// Absolute reorder for drag-and-drop: `orderedItemIds` must be a full
+// permutation of the session's item ids; sequencePosition is rewritten 1..N to
+// match. Rejecting a non-permutation guards against a stale/partial list
+// corrupting positions. (moveSessionItem's up/down swap stays for now; the
+// session screen's drag flow calls this instead.)
+export async function reorderSessionItems(
+  sessionId: string,
+  orderedItemIds: string[],
+  database: ActiOutDB = db
+): Promise<void> {
+  await database.transaction('rw', database.sessionItems, async () => {
+    const siblings = await database.sessionItems.where('sessionId').equals(sessionId).toArray();
+    const siblingIds = new Set(siblings.map((s) => s.id));
+
+    const seen = new Set<string>();
+    for (const id of orderedItemIds) {
+      if (!siblingIds.has(id) || seen.has(id)) {
+        throw new Error(`reorderSessionItems: ${id} is not a unique item of session ${sessionId}`);
+      }
+      seen.add(id);
+    }
+    if (orderedItemIds.length !== siblings.length) {
+      throw new Error(
+        `reorderSessionItems: expected all ${siblings.length} items, got ${orderedItemIds.length}`
+      );
+    }
+
+    const now = nowIso();
+    const byId = new Map(siblings.map((s) => [s.id, s]));
+    for (let index = 0; index < orderedItemIds.length; index += 1) {
+      const item = byId.get(orderedItemIds[index]!)!;
+      const position = index + 1;
+      if (item.sequencePosition !== position) {
+        await database.sessionItems.put({ ...item, sequencePosition: position, updatedAt: now });
+      }
+    }
+  });
+}
+
 export async function addSessionItem(
   sessionId: string,
   exerciseName: string,
