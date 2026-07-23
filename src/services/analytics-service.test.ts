@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ActiOutDB } from '../db/schema';
 import { initializeDb } from '../db/seed';
-import type { SessionStatus, WeightUnit } from '../domain/types';
+import type { MeasurementType, SessionStatus, WeightUnit } from '../domain/types';
 import { KG_PER_LB } from '../domain/units';
 import { localDateDaysAgo, nowIso, weekdayOf } from '../utils/dates';
 import { newId } from '../utils/ids';
@@ -47,13 +47,20 @@ describe('analytics-service', () => {
     });
   }
 
-  async function addItem(id: string, sessionId: string, name: string, position: number): Promise<void> {
+  async function addItem(
+    id: string,
+    sessionId: string,
+    name: string,
+    position: number,
+    measurementTypeSnapshot?: MeasurementType
+  ): Promise<void> {
     const now = nowIso();
     await dbx.sessionItems.add({
       id,
       sessionId,
       exerciseNameSnapshot: name,
       sequencePosition: position,
+      measurementTypeSnapshot,
       createdAt: now,
       updatedAt: now,
     });
@@ -65,6 +72,9 @@ describe('analytics-service', () => {
       setNumber: number;
       reps?: number;
       weight?: number;
+      durationSeconds?: number;
+      distance?: number;
+      distanceUnit?: 'mi' | 'km';
       weightUnit?: WeightUnit;
       isWarmup?: boolean;
       completed?: boolean;
@@ -82,6 +92,9 @@ describe('analytics-service', () => {
       setNumber: opts.setNumber,
       reps: opts.reps,
       weight: opts.weight,
+      durationSeconds: opts.durationSeconds,
+      distance: opts.distance,
+      distanceUnit: opts.distanceUnit,
       weightUnit: opts.weightUnit ?? 'lb',
       isWarmup: opts.isWarmup ?? false,
       completed: opts.completed ?? true,
@@ -395,6 +408,149 @@ describe('analytics-service', () => {
       expect(stats[0]!.count).toBe(2); // both sessions counted
       expect(stats[0]!.avgWeight).toBeCloseTo(100, 6); // only the weighed set
       expect(stats[0]!.avgVolume).toBeCloseTo(2500, 6); // only the fully-defined session
+    });
+  });
+
+  // --- Non-weight measurement types -----------------------------------------
+  // The weight-centric helpers must survive sets that carry no weight and no
+  // reps at all (duration / distance_duration), reporting "no weight PR"
+  // rather than throwing or inventing zeros where a value is unknown.
+
+  describe('duration-only sets', () => {
+    // Plank, one completed session, two working sets logged as durations only.
+    async function seedPlank(): Promise<void> {
+      await addSession('dur-s', '2026-07-05', 'completed');
+      await addItem('dur-item', 'dur-s', 'Plank', 1, 'duration');
+      await addSet('dur-item', { setNumber: 1, durationSeconds: 60 });
+      await addSet('dur-item', { setNumber: 2, durationSeconds: 75 });
+    }
+
+    beforeEach(seedPlank);
+
+    it('getExerciseHistory reports no topSet and zero weight-derived totals', async () => {
+      const history = await getExerciseHistory('Plank', false, dbx);
+      expect(history).toHaveLength(1);
+      const entry = history[0]!;
+      expect(entry.date).toBe('2026-07-05');
+      expect(entry.setCount).toBe(2);
+      expect(entry.topSet).toBeUndefined();
+      expect(entry.totalReps).toBe(0);
+      expect(entry.totalVolume).toBe(0);
+    });
+
+    it('getPRs reports neither a weight nor a volume PR', async () => {
+      const prs = await getPRs('Plank', 'lb', false, dbx);
+      expect(prs.weight).toBeUndefined();
+      expect(prs.volume).toBeUndefined();
+
+      const kgPrs = await getPRs('Plank', 'kg', true, dbx);
+      expect(kgPrs.weight).toBeUndefined();
+      expect(kgPrs.volume).toBeUndefined();
+    });
+
+    it('getSequenceStats counts the session but leaves the averages undefined', async () => {
+      const stats = await getSequenceStats('Plank', 'lb', false, dbx);
+      expect(stats).toHaveLength(1);
+      expect(stats[0]!.position).toBe(1);
+      expect(stats[0]!.count).toBe(1);
+      expect(stats[0]!.avgWeight).toBeUndefined();
+      expect(stats[0]!.avgVolume).toBeUndefined();
+    });
+
+    it('getLastPerformance returns the sets with weight and reps undefined', async () => {
+      const last = await getLastPerformance('Plank', dbx);
+      expect(last?.date).toBe('2026-07-05');
+      expect(last?.sets.map((s) => s.setNumber)).toEqual([1, 2]);
+      expect(last?.sets.map((s) => s.weight)).toEqual([undefined, undefined]);
+      expect(last?.sets.map((s) => s.reps)).toEqual([undefined, undefined]);
+      expect(last?.sets.map((s) => s.weightUnit)).toEqual(['lb', 'lb']);
+    });
+
+    it('getLoggedExerciseNames still lists the exercise', async () => {
+      expect(await getLoggedExerciseNames(dbx)).toEqual(['Plank']);
+    });
+
+    it('a weighted exercise logged alongside it still reports its own PR', async () => {
+      await addItem('dur-squat', 'dur-s', 'Squat', 2);
+      await addSet('dur-squat', { setNumber: 1, reps: 5, weight: 225 });
+
+      const plank = await getPRs('Plank', 'lb', false, dbx);
+      expect(plank.weight).toBeUndefined();
+
+      const squat = await getPRs('Squat', 'lb', false, dbx);
+      expect(squat.weight?.value).toBe(225);
+      expect(squat.volume?.value).toBe(1125);
+    });
+  });
+
+  describe('distance_duration-only sets', () => {
+    // Running, one completed session, two working sets logged as distance +
+    // duration only (units deliberately differ between the two sets).
+    async function seedRunning(): Promise<void> {
+      await addSession('dist-s', '2026-07-06', 'completed');
+      await addItem('dist-item', 'dist-s', 'Running', 1, 'distance_duration');
+      await addSet('dist-item', { setNumber: 1, distance: 3.1, distanceUnit: 'mi', durationSeconds: 1500 });
+      await addSet('dist-item', { setNumber: 2, distance: 5, distanceUnit: 'km', durationSeconds: 1800 });
+    }
+
+    beforeEach(seedRunning);
+
+    it('getExerciseHistory reports no topSet and zero weight-derived totals', async () => {
+      const history = await getExerciseHistory('Running', false, dbx);
+      expect(history).toHaveLength(1);
+      const entry = history[0]!;
+      expect(entry.date).toBe('2026-07-06');
+      expect(entry.setCount).toBe(2);
+      expect(entry.topSet).toBeUndefined();
+      expect(entry.totalReps).toBe(0);
+      expect(entry.totalVolume).toBe(0);
+    });
+
+    it('getPRs reports neither a weight nor a volume PR', async () => {
+      const prs = await getPRs('Running', 'lb', false, dbx);
+      expect(prs.weight).toBeUndefined();
+      expect(prs.volume).toBeUndefined();
+
+      const kgPrs = await getPRs('Running', 'kg', true, dbx);
+      expect(kgPrs.weight).toBeUndefined();
+      expect(kgPrs.volume).toBeUndefined();
+    });
+
+    it('getSequenceStats counts the session but leaves the averages undefined', async () => {
+      const stats = await getSequenceStats('Running', 'lb', false, dbx);
+      expect(stats).toHaveLength(1);
+      expect(stats[0]!.position).toBe(1);
+      expect(stats[0]!.count).toBe(1);
+      expect(stats[0]!.avgWeight).toBeUndefined();
+      expect(stats[0]!.avgVolume).toBeUndefined();
+    });
+
+    it('getLastPerformance returns the sets with weight and reps undefined', async () => {
+      const last = await getLastPerformance('Running', dbx);
+      expect(last?.date).toBe('2026-07-06');
+      expect(last?.sets.map((s) => s.setNumber)).toEqual([1, 2]);
+      expect(last?.sets.map((s) => s.weight)).toEqual([undefined, undefined]);
+      expect(last?.sets.map((s) => s.reps)).toEqual([undefined, undefined]);
+    });
+
+    it('a weighted exercise logged alongside it still reports its own PR', async () => {
+      await addItem('dist-press', 'dist-s', 'Overhead Press', 2);
+      await addSet('dist-press', { setNumber: 1, reps: 8, weight: 95 });
+
+      const running = await getPRs('Running', 'lb', false, dbx);
+      expect(running.weight).toBeUndefined();
+
+      const press = await getPRs('Overhead Press', 'lb', false, dbx);
+      expect(press.weight?.value).toBe(95);
+      expect(press.volume?.value).toBe(760);
+    });
+
+    it('the distance values themselves are untouched by analytics', async () => {
+      await getPRs('Running', 'kg', false, dbx);
+      const sets = (await dbx.sessionSets.toArray()).sort((a, b) => a.setNumber - b.setNumber);
+      expect(sets.map((s) => s.distance)).toEqual([3.1, 5]);
+      expect(sets.map((s) => s.distanceUnit)).toEqual(['mi', 'km']);
+      expect(sets.map((s) => s.durationSeconds)).toEqual([1500, 1800]);
     });
   });
 

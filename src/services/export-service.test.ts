@@ -298,6 +298,117 @@ describe('export-service (db-backed)', () => {
     });
   });
 
+  // The measurement-model fields are all optional, so the validator must
+  // tolerate them and the clear-then-bulkAdd import pass must carry them
+  // through verbatim.
+  describe('measurement-model fields', () => {
+    const CATALOG_ID = 'catalog-measurement';
+
+    // Stamps measurementType/category on a catalog row, distance/distanceUnit
+    // on every session set, and measurementTypeSnapshot on every session item.
+    // Returns the pre-export row counts read straight from Dexie, so the
+    // round-trip assertions below can anchor on a count that is independent of
+    // whatever exportBundle/importBundle actually produced (a dropped row must
+    // fail, not silently shrink both sides of the comparison).
+    async function seedMeasurementFields(
+      database: ActiOutDB
+    ): Promise<{ itemCount: number; setCount: number }> {
+      await seedRoutinesAndSessions(database);
+
+      await database.exerciseCatalog.add({
+        id: CATALOG_ID,
+        canonicalName: 'Weighted Farmer Carry Test',
+        normalizedName: 'weighted farmer carry test',
+        category: 'cardio',
+        measurementType: 'distance_duration',
+        isCustom: true,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      });
+
+      const items = await database.sessionItems.toArray();
+      for (const item of items) {
+        await database.sessionItems.update(item.id, { measurementTypeSnapshot: 'distance_duration' });
+      }
+
+      const sets = await database.sessionSets.toArray();
+      for (const set of sets) {
+        await database.sessionSets.update(set.id, { distance: 3.1, distanceUnit: 'mi', durationSeconds: 1500 });
+      }
+
+      return { itemCount: items.length, setCount: sets.length };
+    }
+
+    it('validateBundle accepts a bundle carrying the measurement-model fields', async () => {
+      const { itemCount, setCount } = await seedMeasurementFields(dbx);
+      expect(itemCount).toBeGreaterThan(0);
+      expect(setCount).toBeGreaterThan(0);
+
+      const bundle = await exportBundle(dbx);
+
+      // The bundle must actually carry the new fields — a validator that says
+      // "ok" about a bundle exportBundle had already stripped proves nothing.
+      const catalogRow = bundle.exerciseCatalog.find((row) => row.id === CATALOG_ID);
+      expect(catalogRow?.measurementType).toBe('distance_duration');
+      expect(catalogRow?.category).toBe('cardio');
+
+      expect(bundle.sessionItems.map((i) => i.measurementTypeSnapshot)).toEqual(
+        new Array<string>(itemCount).fill('distance_duration')
+      );
+      expect(bundle.sessionSets.map((s) => s.distance)).toEqual(new Array<number>(setCount).fill(3.1));
+      expect(bundle.sessionSets.map((s) => s.distanceUnit)).toEqual(new Array<string>(setCount).fill('mi'));
+      expect(bundle.sessionSets.map((s) => s.durationSeconds)).toEqual(new Array<number>(setCount).fill(1500));
+
+      const result = validateBundle(bundle);
+      expect(result.ok).toBe(true);
+    });
+
+    it('an export -> import round trip preserves measurementType, category, distance, and the snapshot', async () => {
+      const { itemCount, setCount } = await seedMeasurementFields(dbx);
+      expect(itemCount).toBeGreaterThan(0);
+      expect(setCount).toBeGreaterThan(0);
+
+      const bundle = await exportBundle(dbx);
+      expect(bundle.sessionItems.length).toBe(itemCount);
+      expect(bundle.sessionSets.length).toBe(setCount);
+
+      await clearAllTables(dbx);
+      expect(await dbx.exerciseCatalog.toArray()).toEqual([]);
+
+      await importBundle(bundle, dbx);
+
+      const catalogRow = await dbx.exerciseCatalog.get(CATALOG_ID);
+      expect(catalogRow?.measurementType).toBe('distance_duration');
+      expect(catalogRow?.category).toBe('cardio');
+
+      // Row counts are anchored on the pre-export DB counts, so losing rows
+      // fails here rather than silently shrinking the expected arrays too.
+      const items = await dbx.sessionItems.toArray();
+      expect(items.length).toBe(itemCount);
+      expect(items.map((i) => i.measurementTypeSnapshot)).toEqual(
+        new Array<string>(itemCount).fill('distance_duration')
+      );
+
+      const sets = await dbx.sessionSets.toArray();
+      expect(sets.length).toBe(setCount);
+      expect(sets.map((s) => s.distance)).toEqual(new Array<number>(setCount).fill(3.1));
+      expect(sets.map((s) => s.distanceUnit)).toEqual(new Array<string>(setCount).fill('mi'));
+      expect(sets.map((s) => s.durationSeconds)).toEqual(new Array<number>(setCount).fill(1500));
+    });
+
+    it('the seeded starter catalog keeps its measurementType/category across a round trip', async () => {
+      const catalogBefore = await dbx.exerciseCatalog.toArray();
+      expect(catalogBefore.some((row) => row.measurementType !== undefined)).toBe(true);
+
+      const bundle = await exportBundle(dbx);
+      await clearAllTables(dbx);
+      await importBundle(bundle, dbx);
+
+      const catalogAfter = await dbx.exerciseCatalog.toArray();
+      expect(catalogAfter).toEqual(catalogBefore);
+    });
+  });
+
   describe('importBundle defensive re-validation', () => {
     it('throws and leaves existing data intact when handed an invalid bundle directly', async () => {
       await createRoutine(pushInput(), dbx);

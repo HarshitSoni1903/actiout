@@ -23,7 +23,7 @@ import {
   IconPlus,
   IconX,
 } from '@tabler/icons-react';
-import type { SessionItem, SessionSet, WeightUnit } from '../../domain/types';
+import type { MeasurementType, SessionItem, SessionSet, WeightUnit } from '../../domain/types';
 import type { ItemPhase } from '../../services/session-flow';
 import { applyAggregateSets } from '../../services/session-flow';
 import { getLastPerformance } from '../../services/analytics-service';
@@ -32,7 +32,7 @@ import { getPreferences } from '../../services/preference-service';
 import { useUiStore } from '../../state/ui-store';
 import { computeAggregatePrefill, type AggregateDraft } from './aggregate-prefill';
 import { SetRow, type SetRowPatch } from './SetRow';
-import { SetRowTimer } from './SetRowTimer';
+import { SetRowTimer, formatDuration } from './SetRowTimer';
 import { RestTimerBar } from './RestTimerBar';
 
 export type SessionItemUpdate = Partial<Pick<SessionItem, 'notes'>>;
@@ -61,23 +61,97 @@ export type SessionItemCardProps = {
 
 type LastPerformance = Awaited<ReturnType<typeof getLastPerformance>>;
 
-// Collapsed dimmed summary — prefers the last logged performance, falling back
-// to the item's planned reps × sets.
-function buildSummary(item: SessionItem, last: LastPerformance): string | undefined {
+// Short holds read better in plain seconds; anything a minute or longer as m:ss.
+function formatHold(totalSeconds: number): string {
+  return totalSeconds < 60 ? `${totalSeconds}s` : formatDuration(totalSeconds);
+}
+
+// Derived read-only pace, e.g. "8:42 min/mi". Undefined unless both inputs are
+// present and positive.
+function formatPace(
+  durationSeconds: number | undefined,
+  distance: number | undefined,
+  distanceUnit: 'mi' | 'km'
+): string | undefined {
+  if (durationSeconds === undefined || distance === undefined || durationSeconds <= 0 || distance <= 0) {
+    return undefined;
+  }
+  return `${formatDuration(Math.round(durationSeconds / distance))} min/${distanceUnit}`;
+}
+
+// Collapsed dimmed summary. Reps-based types prefer the last logged
+// performance (analytics carries reps/weight only), falling back to the plan.
+// Timed and distance types have no cross-session read model, so they summarise
+// the item's own sets.
+function buildSummary(
+  item: SessionItem,
+  last: LastPerformance,
+  sets: SessionSet[],
+  measurementType: MeasurementType
+): string | undefined {
+  if (measurementType === 'duration') {
+    const timed = sets.filter((set) => set.durationSeconds !== undefined);
+    const first = timed[0];
+    if (first) {
+      return `${timed.length} ${timed.length === 1 ? 'set' : 'sets'} · ${formatHold(first.durationSeconds!)}`;
+    }
+    return item.setsPlanned !== undefined ? `${item.setsPlanned} sets` : undefined;
+  }
+
+  if (measurementType === 'distance_duration') {
+    const logged = sets.filter((set) => set.distance !== undefined || set.durationSeconds !== undefined);
+    const first = logged[0];
+    if (first) {
+      const parts: string[] = [];
+      if (first.distance !== undefined) {
+        parts.push(`${first.distance} ${first.distanceUnit ?? 'mi'}`);
+      }
+      if (first.durationSeconds !== undefined) {
+        parts.push(formatDuration(first.durationSeconds));
+      }
+      const head = parts.join(' · ');
+      return logged.length > 1 ? `${logged.length} × ${head}` : head;
+    }
+    return item.setsPlanned !== undefined ? `${item.setsPlanned} sets` : undefined;
+  }
+
   if (last && last.sets.length > 0) {
     const first = last.sets[0]!;
-    const sets = last.sets.length;
-    if (first.weight !== undefined) {
-      return `${first.weight} ${first.weightUnit} × ${first.reps ?? '–'} × ${sets}`;
+    const setCount = last.sets.length;
+    if (measurementType === 'weight_reps' && first.weight !== undefined) {
+      return `${first.weight} ${first.weightUnit} × ${first.reps ?? '–'} × ${setCount}`;
     }
     if (first.reps !== undefined) {
-      return `${first.reps} × ${sets}`;
+      return `${first.reps} × ${setCount}`;
     }
   }
   if (item.repsPlanned !== undefined || item.setsPlanned !== undefined) {
     return `${item.repsPlanned ?? '–'} × ${item.setsPlanned ?? '–'}`;
   }
   return undefined;
+}
+
+// One-line read-only description of a logged set, fields per measurement type.
+function describeSet(set: SessionSet, measurementType: MeasurementType): string {
+  const parts: string[] = [];
+  if (measurementType === 'weight_reps' || measurementType === 'reps') {
+    parts.push(`${set.reps ?? '-'} reps`);
+  }
+  if (measurementType === 'distance_duration' && set.distance !== undefined) {
+    parts.push(`${set.distance} ${set.distanceUnit ?? 'mi'}`);
+  }
+  if (
+    (measurementType === 'duration' || measurementType === 'distance_duration') &&
+    set.durationSeconds !== undefined
+  ) {
+    parts.push(formatDuration(set.durationSeconds));
+  }
+  if (measurementType === 'weight_reps') {
+    parts.push(`${set.weight ?? '-'} ${set.weightUnit}`);
+  } else if (set.weight !== undefined) {
+    parts.push(`${set.weight} ${set.weightUnit}`);
+  }
+  return parts.length > 0 ? parts.join(' × ') : '-';
 }
 
 function StatusIcon({ phase, isDnf }: { phase: ItemPhase; isDnf: boolean }) {
@@ -122,6 +196,8 @@ export function SessionItemCard({
   const [notesDraft, setNotesDraft] = useState(item.notes ?? '');
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [perSetOpen, setPerSetOpen] = useState(false);
+  // Optional weight add-on: collapsed by default for every type but weight_reps.
+  const [weightOpen, setWeightOpen] = useState(false);
   const [draft, setDraft] = useState<AggregateDraft | null>(null);
   const notesId = useId();
   const startRestTimer = useUiStore((state) => state.startRestTimer);
@@ -137,8 +213,15 @@ export function SessionItemCard({
   const preferences = useLiveQuery(() => getPreferences(), []);
   const mode = preferences?.loggingMode ?? 'basic';
   const preferenceUnit: WeightUnit = preferences?.weightUnit ?? 'lb';
+  const preferenceDistanceUnit = preferences?.distanceUnit ?? 'mi';
+  const measurementType = item.measurementTypeSnapshot ?? 'weight_reps';
+  const showReps = measurementType === 'weight_reps' || measurementType === 'reps';
+  const showDuration = measurementType === 'duration' || measurementType === 'distance_duration';
+  const showDistance = measurementType === 'distance_duration';
+  const weightIsPrimary = measurementType === 'weight_reps';
 
-  const summary = buildSummary(item, lastPerformance);
+  const summary = buildSummary(item, lastPerformance, sets, measurementType);
+  const summaryLabel = showReps ? 'Prev' : 'Logged';
   const isDnf = item.dnfAt !== undefined;
 
   // Prefill the basic-mode aggregate draft when the card opens; reset on close
@@ -147,10 +230,14 @@ export function SessionItemCard({
   useEffect(() => {
     if (!expanded) {
       setDraft(null);
+      setWeightOpen(false);
       return;
     }
-    setDraft((prev) => prev ?? computeAggregatePrefill(item, lastPerformance, preferenceUnit));
-  }, [expanded, lastPerformance, preferenceUnit, item.setsPlanned, item.repsPlanned]);
+    setDraft(
+      (prev) =>
+        prev ?? computeAggregatePrefill(item, lastPerformance, preferenceUnit, measurementType, preferenceDistanceUnit)
+    );
+  }, [expanded, lastPerformance, preferenceUnit, measurementType, preferenceDistanceUnit, item.setsPlanned, item.repsPlanned]);
 
   function expandNotes() {
     setNotesDraft(item.notes ?? '');
@@ -182,12 +269,18 @@ export function SessionItemCard({
     if (!draft) {
       return;
     }
+    // Only the fields this measurement type owns are written; applyAggregateSets
+    // preserves existing per-set values for anything left undefined.
+    const includeWeight = weightIsPrimary || weightOpen;
     try {
       await applyAggregateSets(item.id, {
         sets: draft.sets,
-        reps: draft.reps,
-        weight: draft.weight,
         weightUnit: draft.weightUnit,
+        reps: showReps ? draft.reps : undefined,
+        weight: includeWeight ? draft.weight : undefined,
+        durationSeconds: showDuration ? draft.durationSeconds : undefined,
+        distance: showDistance ? draft.distance : undefined,
+        distanceUnit: showDistance ? (draft.distanceUnit ?? preferenceDistanceUnit) : undefined,
       });
       if (item.restSeconds) {
         startRestTimer(item.id, item.restSeconds);
@@ -198,12 +291,109 @@ export function SessionItemCard({
     }
   }
 
+  const draftDistanceUnit = draft?.distanceUnit ?? preferenceDistanceUnit;
+  const pace = formatPace(draft?.durationSeconds, draft?.distance, draftDistanceUnit);
+
+  const setsInput = (
+    <NumberInput
+      size="sm"
+      label="Sets"
+      aria-label={`${item.exerciseNameSnapshot} sets`}
+      min={1}
+      step={1}
+      allowDecimal={false}
+      value={draft?.sets}
+      onChange={(value) => setDraft((d) => (d ? { ...d, sets: typeof value === 'number' ? value : 1 } : d))}
+      style={{ flex: 1, minWidth: 0 }}
+    />
+  );
+
+  const repsInput = (
+    <NumberInput
+      size="sm"
+      label="Reps"
+      aria-label={`${item.exerciseNameSnapshot} reps`}
+      min={0}
+      step={1}
+      allowDecimal={false}
+      value={draft?.reps}
+      onChange={(value) =>
+        setDraft((d) => (d ? { ...d, reps: typeof value === 'number' ? value : undefined } : d))
+      }
+      style={{ flex: 1, minWidth: 0 }}
+    />
+  );
+
+  const durationInput = (
+    <NumberInput
+      size="sm"
+      label="Duration (s)"
+      aria-label={`${item.exerciseNameSnapshot} duration in seconds`}
+      min={0}
+      step={5}
+      allowDecimal={false}
+      value={draft?.durationSeconds}
+      onChange={(value) =>
+        setDraft((d) => (d ? { ...d, durationSeconds: typeof value === 'number' ? value : undefined } : d))
+      }
+      style={{ flex: 1, minWidth: 0 }}
+    />
+  );
+
+  const distanceInputs = (
+    <>
+      <NumberInput
+        size="sm"
+        label="Distance"
+        aria-label={`${item.exerciseNameSnapshot} distance`}
+        min={0}
+        step={0.1}
+        decimalScale={2}
+        value={draft?.distance}
+        onChange={(value) =>
+          setDraft((d) => (d ? { ...d, distance: typeof value === 'number' ? value : undefined } : d))
+        }
+        style={{ flex: 1, minWidth: 0 }}
+      />
+      <SegmentedControl
+        size="sm"
+        data={['mi', 'km']}
+        value={draftDistanceUnit}
+        onChange={(value) => setDraft((d) => (d ? { ...d, distanceUnit: value as 'mi' | 'km' } : d))}
+      />
+    </>
+  );
+
+  const weightInputs = (
+    <>
+      <NumberInput
+        size="sm"
+        label="Weight"
+        aria-label={`${item.exerciseNameSnapshot} weight`}
+        min={0}
+        step={draft?.weightUnit === 'kg' ? 1 : 5}
+        value={draft?.weight}
+        onChange={(value) =>
+          setDraft((d) => (d ? { ...d, weight: typeof value === 'number' ? value : undefined } : d))
+        }
+        style={{ flex: 1, minWidth: 0 }}
+      />
+      <SegmentedControl
+        size="sm"
+        data={['lb', 'kg']}
+        value={draft?.weightUnit ?? preferenceUnit}
+        onChange={(value) => setDraft((d) => (d ? { ...d, weightUnit: value as WeightUnit } : d))}
+      />
+    </>
+  );
+
   const setEditor = (
     <Stack gap="xs">
       {sets.map((set) => (
         <SetRow
           key={set.id}
           set={set}
+          measurementType={measurementType}
           onChange={(patch) => handleSetChange(set, patch)}
           onRemove={() => handleRemoveSet(set.id)}
           timerSlot={<SetRowTimer set={set} />}
@@ -253,7 +443,7 @@ export function SessionItemCard({
             <Stack gap={4}>
               {sets.map((set) => (
                 <Text key={set.id} size="sm">
-                  Set {set.setNumber}: {set.reps ?? '-'} reps &times; {set.weight ?? '-'} {set.weightUnit}
+                  Set {set.setNumber}: {describeSet(set, measurementType)}
                   {set.isWarmup ? ' (warmup)' : ''}
                   {set.completed ? ' ✓' : ''}
                 </Text>
@@ -268,57 +458,45 @@ export function SessionItemCard({
             <Stack gap="sm">
               {summary ? (
                 <Text size="xs" c="dimmed">
-                  Prev: {summary}
+                  {summaryLabel}: {summary}
                 </Text>
               ) : null}
               <Group gap="xs" wrap="nowrap" align="flex-end">
-                <NumberInput
-                  size="sm"
-                  label="Sets"
-                  aria-label={`${item.exerciseNameSnapshot} sets`}
-                  min={1}
-                  step={1}
-                  allowDecimal={false}
-                  value={draft?.sets}
-                  onChange={(value) =>
-                    setDraft((d) => (d ? { ...d, sets: typeof value === 'number' ? value : 1 } : d))
-                  }
-                  style={{ flex: 1, minWidth: 0 }}
-                />
-                <NumberInput
-                  size="sm"
-                  label="Reps"
-                  aria-label={`${item.exerciseNameSnapshot} reps`}
-                  min={0}
-                  step={1}
-                  allowDecimal={false}
-                  value={draft?.reps}
-                  onChange={(value) =>
-                    setDraft((d) => (d ? { ...d, reps: typeof value === 'number' ? value : undefined } : d))
-                  }
-                  style={{ flex: 1, minWidth: 0 }}
-                />
-                <NumberInput
-                  size="sm"
-                  label="Weight"
-                  aria-label={`${item.exerciseNameSnapshot} weight`}
-                  min={0}
-                  step={draft?.weightUnit === 'kg' ? 1 : 5}
-                  value={draft?.weight}
-                  onChange={(value) =>
-                    setDraft((d) => (d ? { ...d, weight: typeof value === 'number' ? value : undefined } : d))
-                  }
-                  style={{ flex: 1, minWidth: 0 }}
-                />
-                <SegmentedControl
-                  size="sm"
-                  data={['lb', 'kg']}
-                  value={draft?.weightUnit ?? preferenceUnit}
-                  onChange={(value) =>
-                    setDraft((d) => (d ? { ...d, weightUnit: value as WeightUnit } : d))
-                  }
-                />
+                {setsInput}
+                {showReps ? repsInput : null}
+                {showDistance ? distanceInputs : null}
+                {showDuration && !showDistance ? durationInput : null}
+                {weightIsPrimary ? weightInputs : null}
               </Group>
+              {showDistance ? (
+                <Group gap="xs" wrap="nowrap" align="flex-end">
+                  {durationInput}
+                  <Text size="xs" c="dimmed" style={{ flex: 1, minWidth: 0 }}>
+                    {pace ?? '–'}
+                  </Text>
+                </Group>
+              ) : null}
+              {!weightIsPrimary ? (
+                <>
+                  <UnstyledButton onClick={() => setWeightOpen((open) => !open)} aria-expanded={weightOpen}>
+                    <Group gap={4} align="center">
+                      <Text size="xs" c="dimmed">
+                        Add weight
+                      </Text>
+                      {weightOpen ? (
+                        <IconChevronUp size={14} color="var(--mantine-color-dimmed)" />
+                      ) : (
+                        <IconChevronDown size={14} color="var(--mantine-color-dimmed)" />
+                      )}
+                    </Group>
+                  </UnstyledButton>
+                  <Collapse in={weightOpen}>
+                    <Group gap="xs" wrap="nowrap" align="flex-end">
+                      {weightInputs}
+                    </Group>
+                  </Collapse>
+                </>
+              ) : null}
               <Button color="actiGreen" fullWidth onClick={() => void handleCompleted()}>
                 Completed
               </Button>

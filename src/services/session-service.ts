@@ -2,7 +2,7 @@ import type { RoutineTemplate, Session, SessionItem, SessionRoutineLink, Session
 import { ActiOutDB, db, type SessionRow } from '../db/schema';
 import { nowIso, todayLocalDate } from '../utils/dates';
 import { newId } from '../utils/ids';
-import { ensureExercise } from './exercise-service';
+import { ensureExercise, resolveMeasurementType, type EnsureExerciseOptions } from './exercise-service';
 import { getRoutine } from './routine-service';
 import { isItemComplete } from './session-set-service';
 import { logEvent } from './events';
@@ -107,6 +107,7 @@ async function createDraft(
         setsPlanned: item.defaultSets ?? routine.defaultSets,
         repsPlanned: item.defaultReps ?? routine.defaultReps,
         restSeconds: item.restSeconds,
+        measurementTypeSnapshot: resolveMeasurementType(item.measurementType),
         createdAt: now,
         updatedAt: now,
       });
@@ -279,10 +280,11 @@ export async function reorderSessionItems(
 export async function addSessionItem(
   sessionId: string,
   exerciseName: string,
+  opts?: EnsureExerciseOptions,
   database: ActiOutDB = db
 ): Promise<SessionItem> {
   // Resolve out-of-transaction dependencies first.
-  const catalogEntry = await ensureExercise(exerciseName, database);
+  const catalogEntry = await ensureExercise(exerciseName, opts, database);
 
   const now = nowIso();
   let created: SessionItem | undefined;
@@ -302,6 +304,7 @@ export async function addSessionItem(
       exerciseCatalogId: catalogEntry.id,
       exerciseNameSnapshot: catalogEntry.canonicalName,
       sequencePosition: maxPosition + 1,
+      measurementTypeSnapshot: resolveMeasurementType(catalogEntry.measurementType),
       createdAt: now,
       updatedAt: now,
     };

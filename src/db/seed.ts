@@ -1,56 +1,61 @@
+import type { ExerciseCategory, MeasurementType } from '../domain/types';
 import { normalizeExerciseName } from '../services/exercise-service';
 import { nowIso } from '../utils/dates';
 import { newId } from '../utils/ids';
 import { ActiOutDB, db } from './schema';
 
-export const STARTER_EXERCISES: ReadonlyArray<{ name: string; category: string }> = [
+export const STARTER_EXERCISES: ReadonlyArray<{
+  name: string;
+  category: ExerciseCategory;
+  measurementType: MeasurementType;
+}> = [
   // chest
-  { name: 'Bench Press', category: 'chest' },
-  { name: 'Incline Bench Press', category: 'chest' },
-  { name: 'Decline Bench Press', category: 'chest' },
-  { name: 'Incline Dumbbell Press', category: 'chest' },
-  { name: 'Dumbbell Fly', category: 'chest' },
-  { name: 'Push Up', category: 'chest' },
+  { name: 'Bench Press', category: 'chest', measurementType: 'weight_reps' },
+  { name: 'Incline Bench Press', category: 'chest', measurementType: 'weight_reps' },
+  { name: 'Decline Bench Press', category: 'chest', measurementType: 'weight_reps' },
+  { name: 'Incline Dumbbell Press', category: 'chest', measurementType: 'weight_reps' },
+  { name: 'Dumbbell Fly', category: 'chest', measurementType: 'weight_reps' },
+  { name: 'Push Up', category: 'chest', measurementType: 'reps' },
   // back
-  { name: 'Deadlift', category: 'back' },
-  { name: 'Barbell Row', category: 'back' },
-  { name: 'Pull Up', category: 'back' },
-  { name: 'Chin Up', category: 'back' },
-  { name: 'Lat Pulldown', category: 'back' },
-  { name: 'Seated Cable Row', category: 'back' },
-  { name: 'T-Bar Row', category: 'back' },
+  { name: 'Deadlift', category: 'back', measurementType: 'weight_reps' },
+  { name: 'Barbell Row', category: 'back', measurementType: 'weight_reps' },
+  { name: 'Pull Up', category: 'back', measurementType: 'reps' },
+  { name: 'Chin Up', category: 'back', measurementType: 'reps' },
+  { name: 'Lat Pulldown', category: 'back', measurementType: 'weight_reps' },
+  { name: 'Seated Cable Row', category: 'back', measurementType: 'weight_reps' },
+  { name: 'T-Bar Row', category: 'back', measurementType: 'weight_reps' },
   // legs
-  { name: 'Squat', category: 'legs' },
-  { name: 'Front Squat', category: 'legs' },
-  { name: 'Romanian Deadlift', category: 'legs' },
-  { name: 'Leg Press', category: 'legs' },
-  { name: 'Leg Curl', category: 'legs' },
-  { name: 'Leg Extension', category: 'legs' },
-  { name: 'Lunge', category: 'legs' },
-  { name: 'Calf Raise', category: 'legs' },
+  { name: 'Squat', category: 'legs', measurementType: 'weight_reps' },
+  { name: 'Front Squat', category: 'legs', measurementType: 'weight_reps' },
+  { name: 'Romanian Deadlift', category: 'legs', measurementType: 'weight_reps' },
+  { name: 'Leg Press', category: 'legs', measurementType: 'weight_reps' },
+  { name: 'Leg Curl', category: 'legs', measurementType: 'weight_reps' },
+  { name: 'Leg Extension', category: 'legs', measurementType: 'weight_reps' },
+  { name: 'Lunge', category: 'legs', measurementType: 'weight_reps' },
+  { name: 'Calf Raise', category: 'legs', measurementType: 'weight_reps' },
   // shoulders
-  { name: 'Overhead Press', category: 'shoulders' },
-  { name: 'Arnold Press', category: 'shoulders' },
-  { name: 'Lateral Raise', category: 'shoulders' },
-  { name: 'Front Raise', category: 'shoulders' },
-  { name: 'Face Pull', category: 'shoulders' },
+  { name: 'Overhead Press', category: 'shoulders', measurementType: 'weight_reps' },
+  { name: 'Arnold Press', category: 'shoulders', measurementType: 'weight_reps' },
+  { name: 'Lateral Raise', category: 'shoulders', measurementType: 'weight_reps' },
+  { name: 'Front Raise', category: 'shoulders', measurementType: 'weight_reps' },
+  { name: 'Face Pull', category: 'shoulders', measurementType: 'weight_reps' },
   // arms
-  { name: 'Bicep Curl', category: 'arms' },
-  { name: 'Hammer Curl', category: 'arms' },
-  { name: 'Tricep Pushdown', category: 'arms' },
-  { name: 'Skull Crusher', category: 'arms' },
-  { name: 'Tricep Dip', category: 'arms' },
-  { name: 'Preacher Curl', category: 'arms' },
+  { name: 'Bicep Curl', category: 'arms', measurementType: 'weight_reps' },
+  { name: 'Hammer Curl', category: 'arms', measurementType: 'weight_reps' },
+  { name: 'Tricep Pushdown', category: 'arms', measurementType: 'weight_reps' },
+  { name: 'Skull Crusher', category: 'arms', measurementType: 'weight_reps' },
+  { name: 'Tricep Dip', category: 'arms', measurementType: 'reps' },
+  { name: 'Preacher Curl', category: 'arms', measurementType: 'weight_reps' },
   // core
-  { name: 'Plank', category: 'core' },
-  { name: 'Crunch', category: 'core' },
-  { name: 'Russian Twist', category: 'core' },
-  { name: 'Hanging Leg Raise', category: 'core' },
-  { name: 'Sit Up', category: 'core' },
+  { name: 'Plank', category: 'core', measurementType: 'duration' },
+  { name: 'Crunch', category: 'core', measurementType: 'reps' },
+  { name: 'Russian Twist', category: 'core', measurementType: 'reps' },
+  { name: 'Hanging Leg Raise', category: 'core', measurementType: 'reps' },
+  { name: 'Sit Up', category: 'core', measurementType: 'reps' },
   // cardio
-  { name: 'Treadmill Run', category: 'cardio' },
-  { name: 'Cycling', category: 'cardio' },
-  { name: 'Rowing Machine', category: 'cardio' },
+  { name: 'Treadmill Run', category: 'cardio', measurementType: 'distance_duration' },
+  { name: 'Cycling', category: 'cardio', measurementType: 'distance_duration' },
+  { name: 'Rowing Machine', category: 'cardio', measurementType: 'distance_duration' },
 ];
 
 // Idempotent: safe to call on every app start. Detects prior seeding via the
@@ -88,6 +93,7 @@ export async function initializeDb(database: ActiOutDB = db): Promise<void> {
           canonicalName: entry.name,
           normalizedName: normalizeExerciseName(entry.name),
           category: entry.category,
+          measurementType: entry.measurementType,
           isCustom: false,
           createdAt: now,
           updatedAt: now,

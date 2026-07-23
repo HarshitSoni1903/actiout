@@ -58,6 +58,18 @@ describe('initializeDb', () => {
     expect(catalogCount).toBe(40);
   });
 
+  it('assigns measurementType per exercise and preserves category (I3)', async () => {
+    await initializeDb(testDb);
+    const entries = await testDb.exerciseCatalog.toArray();
+    const byName = new Map(entries.map((e) => [e.normalizedName, e]));
+
+    expect(byName.get('plank')?.measurementType).toBe('duration');
+    expect(byName.get('treadmill run')?.measurementType).toBe('distance_duration');
+    expect(byName.get('push up')?.measurementType).toBe('reps');
+    expect(byName.get('bench press')?.measurementType).toBe('weight_reps');
+    expect(byName.get('bench press')?.category).toBe('chest');
+  });
+
   it('produces unique, lowercased, single-spaced normalizedName values', async () => {
     await initializeDb(testDb);
     const entries = await testDb.exerciseCatalog.toArray();

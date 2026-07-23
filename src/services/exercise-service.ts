@@ -1,9 +1,22 @@
-import type { ExerciseCatalogEntry } from '../domain/types';
+import type { ExerciseCatalogEntry, ExerciseCategory, MeasurementType } from '../domain/types';
 import { ActiOutDB, db } from '../db/schema';
 import { nowIso } from '../utils/dates';
 import { newId } from '../utils/ids';
 
 const DEFAULT_SEARCH_LIMIT = 8;
+
+export const DEFAULT_MEASUREMENT_TYPE: MeasurementType = 'weight_reps';
+
+// Falls back to DEFAULT_MEASUREMENT_TYPE when an exercise (catalog entry,
+// routine item, session item) predates the measurement-type field.
+export function resolveMeasurementType(t: MeasurementType | undefined): MeasurementType {
+  return t ?? DEFAULT_MEASUREMENT_TYPE;
+}
+
+export type EnsureExerciseOptions = {
+  measurementType?: MeasurementType;
+  category?: ExerciseCategory;
+};
 
 // Canonical normalization: trim, collapse internal whitespace runs to a
 // single space, lowercase. Used as the uniqueness key for the exercise
@@ -44,7 +57,13 @@ export async function searchExercises(
 // (e.g. a UI double-tap): if two overlapping calls both miss the lookup, the
 // &normalizedName unique index rejects the losing add; we catch that and
 // return the winning row instead of propagating the ConstraintError.
-export async function ensureExercise(name: string, database: ActiOutDB = db): Promise<ExerciseCatalogEntry> {
+// `opts` only applies when creating a new entry; an existing entry's type
+// wins and opts are ignored.
+export async function ensureExercise(
+  name: string,
+  opts?: EnsureExerciseOptions,
+  database: ActiOutDB = db
+): Promise<ExerciseCatalogEntry> {
   const normalizedName = normalizeExerciseName(name);
   if (normalizedName === '') {
     throw new Error('ensureExercise: name must not be empty or whitespace-only');
@@ -60,6 +79,8 @@ export async function ensureExercise(name: string, database: ActiOutDB = db): Pr
     id: newId(),
     canonicalName: name.trim().replace(/\s+/g, ' '),
     normalizedName,
+    category: opts?.category,
+    measurementType: opts?.measurementType ?? DEFAULT_MEASUREMENT_TYPE,
     isCustom: true,
     createdAt: now,
     updatedAt: now,

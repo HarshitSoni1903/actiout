@@ -1,8 +1,8 @@
-import type { RoutineTemplate, RoutineTemplateItem, WeightUnit } from '../domain/types';
+import type { ExerciseCategory, MeasurementType, RoutineTemplate, RoutineTemplateItem, WeightUnit } from '../domain/types';
 import { ActiOutDB, db } from '../db/schema';
 import { nowIso } from '../utils/dates';
 import { newId } from '../utils/ids';
-import { ensureExercise } from './exercise-service';
+import { ensureExercise, resolveMeasurementType } from './exercise-service';
 import { getPreferences } from './preference-service';
 import { logEvent } from './events';
 
@@ -15,6 +15,8 @@ export type RoutineItemInput = {
   defaultDurationSeconds?: number;
   restSeconds?: number;
   notes?: string;
+  measurementType?: MeasurementType;
+  category?: ExerciseCategory;
 };
 
 export type RoutineInput = {
@@ -77,7 +79,11 @@ async function buildItemRows(
   const rows: Array<RoutineTemplateItem & { routineTemplateId: string; createdAt: string; updatedAt: string }> = [];
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index] as RoutineItemInput;
-    const catalogEntry = await ensureExercise(item.exerciseName, database);
+    const catalogEntry = await ensureExercise(
+      item.exerciseName,
+      { measurementType: item.measurementType, category: item.category },
+      database
+    );
     const defaultWeightUnit =
       item.defaultWeight !== undefined ? item.defaultWeightUnit ?? preference.weightUnit : item.defaultWeightUnit;
 
@@ -94,6 +100,7 @@ async function buildItemRows(
       defaultDurationSeconds: item.defaultDurationSeconds,
       restSeconds: item.restSeconds,
       notes: item.notes,
+      measurementType: resolveMeasurementType(catalogEntry.measurementType),
       createdAt: now,
       updatedAt: now,
     });
@@ -130,6 +137,7 @@ async function hydrate(
       defaultDurationSeconds: row.defaultDurationSeconds,
       restSeconds: row.restSeconds,
       notes: row.notes,
+      measurementType: row.measurementType,
     }));
 
   return {

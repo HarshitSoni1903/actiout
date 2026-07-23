@@ -13,6 +13,18 @@ export type SessionStatus = 'draft' | 'completed' | 'dnf';
 export type DraftConflictAction = 'ask' | 'resume' | 'close-and-start-new';
 // basic = one entry per exercise; advanced = log each set individually.
 export type LoggingMode = 'basic' | 'advanced';
+// What a given exercise records: straight weight+reps, bodyweight reps only,
+// a held/timed duration, or a distance covered over a duration.
+export type MeasurementType = 'weight_reps' | 'reps' | 'duration' | 'distance_duration';
+export type ExerciseCategory =
+  | 'chest'
+  | 'back'
+  | 'legs'
+  | 'shoulders'
+  | 'arms'
+  | 'core'
+  | 'cardio'
+  | 'other';
 
 export type Preference = {
   id: string;
@@ -29,7 +41,8 @@ export type ExerciseCatalogEntry = {
   id: string;
   canonicalName: string;
   normalizedName: string;
-  category?: string;
+  category?: ExerciseCategory;
+  measurementType?: MeasurementType;
   isCustom: boolean;
   createdAt: string;
   updatedAt: string;
@@ -63,6 +76,7 @@ export type RoutineTemplateItem = {
   defaultDurationSeconds?: number;
   restSeconds?: number;
   notes?: string;
+  measurementType?: MeasurementType;
 };
 
 export type Session = {
@@ -103,6 +117,7 @@ export type SessionItem = {
   activatedAt?: string;
   // per-exercise DNF; toggled independently of session-level status
   dnfAt?: string;
+  measurementTypeSnapshot?: MeasurementType;
   createdAt: string;
   updatedAt: string;
 };
@@ -116,6 +131,8 @@ export type SessionSet = {
   weight?: number;
   // actual recorded duration for timed exercises; placeholder, timer UI pending
   durationSeconds?: number;
+  distance?: number;
+  distanceUnit?: 'mi' | 'km';
   weightUnit: WeightUnit;
   isWarmup: boolean;
   completed: boolean;

@@ -172,6 +172,15 @@ describe('startSession', () => {
     const events = await dbx.appEvents.where('[entityType+entityId]').equals(['session', session.id]).toArray();
     expect(events.map((e) => e.eventType)).toContain('started');
   });
+
+  it('snapshots measurementType from the routine item onto the session item', async () => {
+    const routine = await createRoutine(
+      { name: 'Cardio Day', daysOfWeek: [1], items: [{ exerciseName: 'Treadmill Run' }] },
+      dbx
+    );
+    const session = await startSession([routine.id], undefined, dbx);
+    expect(session.items[0]?.measurementTypeSnapshot).toBe('distance_duration');
+  });
 });
 
 describe('startQuickSession', () => {
@@ -282,7 +291,7 @@ describe('addSessionItem', () => {
     const push = await createRoutine(pushInput(), dbx);
     const session = await startSession([push.id], undefined, dbx);
 
-    const added = await addSessionItem(session.id, 'Plank', dbx);
+    const added = await addSessionItem(session.id, 'Plank', undefined, dbx);
     expect(added.sequencePosition).toBe(4);
     expect(added.setsPlanned).toBeUndefined();
     expect(added.repsPlanned).toBeUndefined();
@@ -298,8 +307,14 @@ describe('addSessionItem', () => {
 
   it('appends at position 1 for an empty (quick) session', async () => {
     const session = await startQuickSession(undefined, dbx);
-    const added = await addSessionItem(session.id, 'Plank', dbx);
+    const added = await addSessionItem(session.id, 'Plank', undefined, dbx);
     expect(added.sequencePosition).toBe(1);
+  });
+
+  it('stamps measurementTypeSnapshot from the resolved catalog entry', async () => {
+    const session = await startQuickSession(undefined, dbx);
+    const added = await addSessionItem(session.id, 'Plank', undefined, dbx);
+    expect(added.measurementTypeSnapshot).toBe('duration');
   });
 });
 
@@ -324,7 +339,7 @@ describe('removeSessionItem', () => {
 
   it('cascade-deletes its sets', async () => {
     const s = await startQuickSession(undefined, dbx);
-    const item = await addSessionItem(s.id, 'Squat', dbx);
+    const item = await addSessionItem(s.id, 'Squat', undefined, dbx);
     await addSet(item.id, {}, dbx);
     await removeSessionItem(item.id, dbx);
     const sets = await dbx.sessionSets.where('sessionItemId').equals(item.id).toArray();
@@ -335,8 +350,8 @@ describe('removeSessionItem', () => {
 describe('event trim', () => {
   it('moveSessionItem / addSessionItem / removeSessionItem log NO item-* events', async () => {
     const s = await startQuickSession(undefined, dbx);
-    const item = await addSessionItem(s.id, 'Squat', dbx);
-    await addSessionItem(s.id, 'Bench', dbx);
+    const item = await addSessionItem(s.id, 'Squat', undefined, dbx);
+    await addSessionItem(s.id, 'Bench', undefined, dbx);
     await moveSessionItem(item.id, 'down', dbx);
     await removeSessionItem(item.id, dbx);
     const events = await dbx.appEvents.toArray();
@@ -379,7 +394,7 @@ describe('updateSessionItem', () => {
 describe('completeSession / dnfSession', () => {
   it('requires ≥1 derived-complete item', async () => {
     const s = await startQuickSession(undefined, dbx);
-    const item = await addSessionItem(s.id, 'Squat', dbx);
+    const item = await addSessionItem(s.id, 'Squat', undefined, dbx);
     await addSet(item.id, { completed: false }, dbx);
     await expect(completeSession(s.id, dbx)).rejects.toThrow();
     await updateSet((await listSetsForItem(item.id, dbx))[0]!.id, { completed: true }, dbx);
@@ -389,7 +404,7 @@ describe('completeSession / dnfSession', () => {
 
   it('completeSession sets status, endedAt and durationSeconds; completing twice throws', async () => {
     const s = await startQuickSession(undefined, dbx);
-    const item = await addSessionItem(s.id, 'Squat', dbx);
+    const item = await addSessionItem(s.id, 'Squat', undefined, dbx);
     await addSet(item.id, { completed: true }, dbx);
 
     await completeSession(s.id, dbx);
@@ -417,7 +432,7 @@ describe('completeSession / dnfSession', () => {
 
   it('logs "completed" and "dnf" events', async () => {
     const s1 = await startQuickSession(undefined, dbx);
-    const item = await addSessionItem(s1.id, 'Squat', dbx);
+    const item = await addSessionItem(s1.id, 'Squat', undefined, dbx);
     await addSet(item.id, { completed: true }, dbx);
     await completeSession(s1.id, dbx);
     const e1 = await dbx.appEvents.where('[entityType+entityId]').equals(['session', s1.id]).toArray();
@@ -431,7 +446,7 @@ describe('completeSession / dnfSession', () => {
 
   it('mutators no longer reject a completed (unlocked) session', async () => {
     const s = await startQuickSession(undefined, dbx);
-    const item = await addSessionItem(s.id, 'Squat', dbx);
+    const item = await addSessionItem(s.id, 'Squat', undefined, dbx);
     await addSet(item.id, { completed: true }, dbx);
     await completeSession(s.id, dbx);
     await expect(addSet(item.id, { reps: 5 }, dbx)).resolves.toBeDefined();
@@ -441,7 +456,7 @@ describe('completeSession / dnfSession', () => {
 describe('unlockSession', () => {
   it('validates an existing session and mutates nothing', async () => {
     const s = await startQuickSession(undefined, dbx);
-    const item = await addSessionItem(s.id, 'Squat', dbx);
+    const item = await addSessionItem(s.id, 'Squat', undefined, dbx);
     await addSet(item.id, { completed: true }, dbx);
     await completeSession(s.id, dbx);
 
@@ -464,7 +479,7 @@ describe('unlockSession', () => {
 describe('deleteSession', () => {
   it('cascades items, sets, links and logs "deleted"', async () => {
     const s = await startQuickSession(undefined, dbx);
-    const item = await addSessionItem(s.id, 'Squat', dbx);
+    const item = await addSessionItem(s.id, 'Squat', undefined, dbx);
     await addSet(item.id, {}, dbx);
     await deleteSession(s.id, dbx);
     expect(await getSession(s.id, dbx)).toBeUndefined();

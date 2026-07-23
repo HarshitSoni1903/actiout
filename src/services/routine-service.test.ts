@@ -156,6 +156,17 @@ describe('routine-service (db-backed)', () => {
       const fetched = await getRoutine(routine.id, testDb);
       expect(fetched?.items[0]?.defaultDurationSeconds).toBe(60);
     });
+
+    it('hydrates a distance_duration catalog exercise with the same measurementType', async () => {
+      const routine = await createRoutine(
+        baseInput({ items: [{ exerciseName: 'Treadmill Run' }] }),
+        testDb
+      );
+      expect(routine.items[0]?.measurementType).toBe('distance_duration');
+
+      const fetched = await getRoutine(routine.id, testDb);
+      expect(fetched?.items[0]?.measurementType).toBe('distance_duration');
+    });
   });
 
   describe('updateRoutine timeOfDay', () => {

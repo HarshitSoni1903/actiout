@@ -47,13 +47,26 @@ export async function dnfSessionItem(itemId: string, database: ActiOutDB = db): 
 }
 
 // Basic-mode aggregate entry: makes the item have exactly `agg.sets` sets,
-// each stamped with reps/weight/weightUnit as given, completed: true,
-// isWarmup: false — aggregate mode owns the item, so every field is
-// overwritten regardless of prior state. Extra sets are removed; missing
-// ones are added; all are renumbered contiguously 1..n.
+// completed: true, isWarmup: false — aggregate mode owns the item's set
+// count/completed/isWarmup regardless of prior state. For existing (kept)
+// rows, each metric field (reps/weight/durationSeconds/distance/distanceUnit)
+// is overwritten only when `agg` provides it; an omitted field falls back to
+// the row's current value so a blank basic-mode input never silently erases
+// a value recorded elsewhere (e.g. a per-set stopwatch). weightUnit always
+// comes from `agg` (it is required). New rows simply take the agg values —
+// there is nothing to preserve. Extra sets are removed; missing ones are
+// added; all are renumbered contiguously 1..n.
 export async function applyAggregateSets(
   itemId: string,
-  agg: { sets: number; reps?: number; weight?: number; weightUnit: WeightUnit },
+  agg: {
+    sets: number;
+    reps?: number;
+    weight?: number;
+    weightUnit: WeightUnit;
+    durationSeconds?: number;
+    distance?: number;
+    distanceUnit?: 'mi' | 'km';
+  },
   database: ActiOutDB = db
 ): Promise<void> {
   await database.transaction('rw', database.sessionItems, database.sessionSets, database.sessions, async () => {
@@ -75,9 +88,14 @@ export async function applyAggregateSets(
       const patched: SessionSet = {
         ...row,
         setNumber: index + 1,
-        reps: agg.reps,
-        weight: agg.weight,
-        weightUnit: agg.weightUnit,
+        reps: agg.reps ?? row.reps,
+        weight: agg.weight ?? row.weight,
+        // The unit only travels with a weight — a type whose lb/kg control is
+        // hidden must never silently relabel an existing weight.
+        weightUnit: agg.weight !== undefined ? agg.weightUnit : row.weightUnit,
+        durationSeconds: agg.durationSeconds ?? row.durationSeconds,
+        distance: agg.distance ?? row.distance,
+        distanceUnit: agg.distanceUnit ?? row.distanceUnit,
         isWarmup: false,
         completed: true,
         updatedAt: now,
@@ -94,6 +112,9 @@ export async function applyAggregateSets(
         reps: agg.reps,
         weight: agg.weight,
         weightUnit: agg.weightUnit,
+        durationSeconds: agg.durationSeconds,
+        distance: agg.distance,
+        distanceUnit: agg.distanceUnit,
         isWarmup: false,
         completed: true,
         createdAt: now,

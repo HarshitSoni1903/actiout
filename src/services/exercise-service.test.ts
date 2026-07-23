@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ActiOutDB } from '../db/schema';
 import { initializeDb } from '../db/seed';
-import { ensureExercise, normalizeExerciseName, searchExercises } from './exercise-service';
+import {
+  DEFAULT_MEASUREMENT_TYPE,
+  ensureExercise,
+  normalizeExerciseName,
+  resolveMeasurementType,
+  searchExercises,
+} from './exercise-service';
 
 describe('normalizeExerciseName', () => {
   it('trims, collapses whitespace, and lowercases', () => {
@@ -24,7 +30,7 @@ describe('exercise-service (db-backed)', () => {
   describe('ensureExercise', () => {
     it('returns the seeded row for an existing exercise, without creating a duplicate', async () => {
       const before = await testDb.exerciseCatalog.count();
-      const entry = await ensureExercise('Bench Press', testDb);
+      const entry = await ensureExercise('Bench Press', undefined, testDb);
       const after = await testDb.exerciseCatalog.count();
 
       expect(entry.canonicalName).toBe('Bench Press');
@@ -35,7 +41,7 @@ describe('exercise-service (db-backed)', () => {
 
     it('creates a new custom exercise when no match exists', async () => {
       const before = await testDb.exerciseCatalog.count();
-      const entry = await ensureExercise('Zercher Squat', testDb);
+      const entry = await ensureExercise('Zercher Squat', undefined, testDb);
       const after = await testDb.exerciseCatalog.count();
 
       expect(entry.canonicalName).toBe('Zercher Squat');
@@ -45,8 +51,8 @@ describe('exercise-service (db-backed)', () => {
     });
 
     it('is idempotent: calling twice with the same name returns the same id', async () => {
-      const first = await ensureExercise('Zercher Squat', testDb);
-      const second = await ensureExercise('Zercher Squat', testDb);
+      const first = await ensureExercise('Zercher Squat', undefined, testDb);
+      const second = await ensureExercise('Zercher Squat', undefined, testDb);
 
       expect(second.id).toBe(first.id);
       const count = await testDb.exerciseCatalog.where('normalizedName').equals('zercher squat').count();
@@ -55,8 +61,8 @@ describe('exercise-service (db-backed)', () => {
 
     it('handles concurrent calls for the same new name: same id, no rejection', async () => {
       const [first, second] = await Promise.all([
-        ensureExercise('Same New Name', testDb),
-        ensureExercise('Same New Name', testDb),
+        ensureExercise('Same New Name', undefined, testDb),
+        ensureExercise('Same New Name', undefined, testDb),
       ]);
 
       expect(second.id).toBe(first.id);
@@ -65,8 +71,47 @@ describe('exercise-service (db-backed)', () => {
     });
 
     it('throws on an empty or whitespace-only name', async () => {
-      await expect(ensureExercise('', testDb)).rejects.toThrow();
-      await expect(ensureExercise('   ', testDb)).rejects.toThrow();
+      await expect(ensureExercise('', undefined, testDb)).rejects.toThrow();
+      await expect(ensureExercise('   ', undefined, testDb)).rejects.toThrow();
+    });
+
+    it('creates a new custom exercise with the given measurementType and category', async () => {
+      const entry = await ensureExercise(
+        'Sprints',
+        { measurementType: 'distance_duration', category: 'cardio' },
+        testDb
+      );
+
+      expect(entry.measurementType).toBe('distance_duration');
+      expect(entry.category).toBe('cardio');
+    });
+
+    it('ignores opts on a second call and returns the original entry unchanged', async () => {
+      const first = await ensureExercise(
+        'Sprints',
+        { measurementType: 'distance_duration', category: 'cardio' },
+        testDb
+      );
+      const second = await ensureExercise('Sprints', { measurementType: 'reps', category: 'legs' }, testDb);
+
+      expect(second.id).toBe(first.id);
+      expect(second.measurementType).toBe('distance_duration');
+      expect(second.category).toBe('cardio');
+    });
+
+    it('defaults measurementType to weight_reps when no opts are given', async () => {
+      const entry = await ensureExercise('X', undefined, testDb);
+      expect(entry.measurementType).toBe(DEFAULT_MEASUREMENT_TYPE);
+    });
+  });
+
+  describe('resolveMeasurementType', () => {
+    it('returns the given type when defined', () => {
+      expect(resolveMeasurementType('duration')).toBe('duration');
+    });
+
+    it('falls back to DEFAULT_MEASUREMENT_TYPE when undefined', () => {
+      expect(resolveMeasurementType(undefined)).toBe(DEFAULT_MEASUREMENT_TYPE);
     });
   });
 

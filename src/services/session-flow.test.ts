@@ -169,6 +169,90 @@ describe('applyAggregateSets', () => {
   it('throws for an unknown item', async () => {
     await expect(applyAggregateSets('nope', { sets: 1, weightUnit: 'lb' }, dbx)).rejects.toThrow();
   });
+
+  it('writes durationSeconds on every set', async () => {
+    await applyAggregateSets(itemId, { sets: 2, weightUnit: 'lb', durationSeconds: 60 }, dbx);
+
+    const sets = await dbx.sessionSets.where('sessionItemId').equals(itemId).toArray();
+    expect(sets.length).toBe(2);
+    for (const s of sets) {
+      expect(s.durationSeconds).toBe(60);
+    }
+  });
+
+  it('writes distance and distanceUnit', async () => {
+    await applyAggregateSets(itemId, { sets: 1, weightUnit: 'lb', distance: 2.4, distanceUnit: 'km' }, dbx);
+
+    const sets = await dbx.sessionSets.where('sessionItemId').equals(itemId).toArray();
+    expect(sets.length).toBe(1);
+    expect(sets[0]?.distance).toBe(2.4);
+    expect(sets[0]?.distanceUnit).toBe('km');
+  });
+
+  it('preserves an existing set durationSeconds, distance and distanceUnit when a later agg call omits them', async () => {
+    await applyAggregateSets(
+      itemId,
+      { sets: 1, weightUnit: 'lb', durationSeconds: 45, distance: 2.4, distanceUnit: 'km' },
+      dbx
+    );
+    await applyAggregateSets(itemId, { sets: 1, weightUnit: 'lb' }, dbx);
+
+    const sets = await dbx.sessionSets.where('sessionItemId').equals(itemId).toArray();
+    expect(sets.length).toBe(1);
+    expect(sets[0]?.durationSeconds).toBe(45);
+    expect(sets[0]?.distance).toBe(2.4);
+    expect(sets[0]?.distanceUnit).toBe('km');
+  });
+
+  it('preserves existing weight and reps when a later agg call omits both', async () => {
+    await applyAggregateSets(itemId, { sets: 1, reps: 8, weight: 100, weightUnit: 'lb' }, dbx);
+    await applyAggregateSets(itemId, { sets: 1, weightUnit: 'lb' }, dbx);
+
+    const sets = await dbx.sessionSets.where('sessionItemId').equals(itemId).toArray();
+    expect(sets.length).toBe(1);
+    expect(sets[0]?.weight).toBe(100);
+    expect(sets[0]?.reps).toBe(8);
+  });
+
+  it('keeps the existing weightUnit when a later agg call omits the weight', async () => {
+    await applyAggregateSets(itemId, { sets: 1, weight: 20, weightUnit: 'kg' }, dbx);
+    await applyAggregateSets(itemId, { sets: 1, weightUnit: 'lb', durationSeconds: 60 }, dbx);
+
+    const sets = await dbx.sessionSets.where('sessionItemId').equals(itemId).toArray();
+    expect(sets.length).toBe(1);
+    expect(sets[0]?.weight).toBe(20);
+    expect(sets[0]?.weightUnit).toBe('kg');
+  });
+
+  it('applies the incoming weightUnit when the agg call does provide a weight', async () => {
+    await applyAggregateSets(itemId, { sets: 1, weight: 20, weightUnit: 'kg' }, dbx);
+    await applyAggregateSets(itemId, { sets: 1, weight: 45, weightUnit: 'lb' }, dbx);
+
+    const sets = await dbx.sessionSets.where('sessionItemId').equals(itemId).toArray();
+    expect(sets.length).toBe(1);
+    expect(sets[0]?.weight).toBe(45);
+    expect(sets[0]?.weightUnit).toBe('lb');
+  });
+
+  it('still overwrites weight, durationSeconds, distance and distanceUnit when the later agg call provides new values', async () => {
+    await applyAggregateSets(
+      itemId,
+      { sets: 1, weight: 100, weightUnit: 'lb', durationSeconds: 30, distance: 1.0, distanceUnit: 'mi' },
+      dbx
+    );
+    await applyAggregateSets(
+      itemId,
+      { sets: 1, weight: 120, weightUnit: 'lb', durationSeconds: 90, distance: 5.5, distanceUnit: 'km' },
+      dbx
+    );
+
+    const sets = await dbx.sessionSets.where('sessionItemId').equals(itemId).toArray();
+    expect(sets.length).toBe(1);
+    expect(sets[0]?.weight).toBe(120);
+    expect(sets[0]?.durationSeconds).toBe(90);
+    expect(sets[0]?.distance).toBe(5.5);
+    expect(sets[0]?.distanceUnit).toBe('km');
+  });
 });
 
 function mkItem(overrides: Partial<SessionItem>): SessionItem {
