@@ -1,7 +1,6 @@
 import type { BodyweightEntry, WeightUnit } from '../domain/types';
 import { ActiOutDB, db } from '../db/schema';
-import { nowIso, todayLocalDate } from '../utils/dates';
-import { newId } from '../utils/ids';
+import { newId, nowIso, todayLocalDate } from '../utils';
 import { logEvent } from './events';
 
 export async function addBodyweight(

@@ -1,6 +1,6 @@
 import { formatWeight } from '../../domain/units';
 import type { HistoryEntry } from '../../services/analytics-service';
-import { formatShortDate } from '../../utils/dates';
+import { formatShortDate } from '../../utils';
 import { EmptyState } from '../common/EmptyState';
 
 export type HistoryListProps = {

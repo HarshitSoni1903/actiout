@@ -1,7 +1,6 @@
 import type { SessionSet } from '../domain/types';
 import { ActiOutDB, db } from '../db/schema';
-import { nowIso } from '../utils/dates';
-import { newId } from '../utils/ids';
+import { newId, nowIso } from '../utils';
 import { getPreferences } from './preference-service';
 
 type SetPatch = Partial<

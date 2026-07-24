@@ -3,7 +3,7 @@ import { ActiOutDB } from '../db/schema';
 import { initializeDb } from '../db/seed';
 import { createRoutine, type RoutineInput } from './routine-service';
 import { addSet, listSetsForItem, updateSet } from './session-set-service';
-import { todayLocalDate } from '../utils/dates';
+import { todayLocalDate } from '../utils';
 import {
   DraftExistsError,
   addSessionItem,

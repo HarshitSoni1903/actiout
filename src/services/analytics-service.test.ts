@@ -3,8 +3,7 @@ import { ActiOutDB } from '../db/schema';
 import { initializeDb } from '../db/seed';
 import type { MeasurementType, SessionStatus, WeightUnit } from '../domain/types';
 import { KG_PER_LB } from '../domain/units';
-import { localDateDaysAgo, nowIso, weekdayOf } from '../utils/dates';
-import { newId } from '../utils/ids';
+import { localDateDaysAgo, newId, nowIso, weekdayOf } from '../utils';
 import { normalizeExerciseName } from './exercise-service';
 import {
   getBodyweightTrend,

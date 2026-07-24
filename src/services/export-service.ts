@@ -8,7 +8,7 @@ import type {
   SessionSet,
 } from '../domain/types';
 import { ActiOutDB, db, type RoutineTemplateItemRow, type RoutineTemplateRow, type SessionRow } from '../db/schema';
-import { nowIso } from '../utils/dates';
+import { nowIso } from '../utils';
 import { logEvent } from './events';
 import { takeSnapshot } from './snapshot-service';
 

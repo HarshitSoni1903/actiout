@@ -1,7 +1,6 @@
 import type { ExerciseCatalogEntry, ExerciseCategory, MeasurementType } from '../domain/types';
 import { ActiOutDB, db } from '../db/schema';
-import { nowIso } from '../utils/dates';
-import { newId } from '../utils/ids';
+import { newId, normalizeExerciseName, nowIso } from '../utils';
 
 const DEFAULT_SEARCH_LIMIT = 8;
 
@@ -18,12 +17,12 @@ export type EnsureExerciseOptions = {
   category?: ExerciseCategory;
 };
 
-// Canonical normalization: trim, collapse internal whitespace runs to a
-// single space, lowercase. Used as the uniqueness key for the exercise
-// catalog (see `exerciseCatalog: 'id, &normalizedName'` in schema.ts).
-export function normalizeExerciseName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
-}
+// Used as the uniqueness key for the exercise catalog (see
+// `exerciseCatalog: 'id, &normalizedName'` in schema.ts). Implementation
+// lives in utils/index.ts (zero-dependency) so it can also be imported by
+// Dexie-free logic modules; re-exported here so existing callers importing
+// it from this service module are unaffected.
+export { normalizeExerciseName };
 
 // Prefix matches on normalizedName rank first, then substring matches
 // elsewhere in the name. Empty (or whitespace-only) query short-circuits to [].
@@ -50,6 +49,16 @@ export async function searchExercises(
   }
 
   return [...prefixMatches, ...substringMatches].slice(0, limit);
+}
+
+// Full catalog listing (mirrors searchExercises' own toArray() approach —
+// the catalog is expected to stay small). Used where a caller needs an
+// authoritative, un-truncated view rather than searchExercises' ranked and
+// limited suggestions — e.g. the typeahead's existing-vs-new-exercise check,
+// which must not be fooled by a debounce lag or an exact match ranked
+// outside a search's limit.
+export async function listExercises(database: ActiOutDB = db): Promise<ExerciseCatalogEntry[]> {
+  return database.exerciseCatalog.toArray();
 }
 
 // Finds an existing catalog entry by normalizedName; creates a new

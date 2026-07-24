@@ -1,7 +1,6 @@
 import type { ExerciseCategory, MeasurementType, RoutineTemplate, RoutineTemplateItem, WeightUnit } from '../domain/types';
 import { ActiOutDB, db } from '../db/schema';
-import { nowIso } from '../utils/dates';
-import { newId } from '../utils/ids';
+import { newId, nowIso } from '../utils';
 import { ensureExercise, resolveMeasurementType } from './exercise-service';
 import { getPreferences } from './preference-service';
 import { logEvent } from './events';
@@ -101,6 +100,7 @@ async function buildItemRows(
       restSeconds: item.restSeconds,
       notes: item.notes,
       measurementType: resolveMeasurementType(catalogEntry.measurementType),
+      category: catalogEntry.category,
       createdAt: now,
       updatedAt: now,
     });
@@ -138,6 +138,7 @@ async function hydrate(
       restSeconds: row.restSeconds,
       notes: row.notes,
       measurementType: row.measurementType,
+      category: row.category,
     }));
 
   return {

@@ -1,7 +1,7 @@
 import type { SessionItem, SessionSet, SessionStatus, WeightUnit } from '../domain/types';
 import { ActiOutDB, db, type SessionRow } from '../db/schema';
 import { convertWeight } from '../domain/units';
-import { localDateDaysAgo, weekdayOf } from '../utils/dates';
+import { localDateDaysAgo, weekdayOf } from '../utils';
 import { normalizeExerciseName } from './exercise-service';
 
 // Per-item summary computed from that item's non-warmup, completed ("working")

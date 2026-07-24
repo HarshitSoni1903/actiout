@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react';
 import { ActionIcon, Card, Group, NumberInput, SegmentedControl, Stack, Text, Textarea } from '@mantine/core';
 import { IconTrash } from '@tabler/icons-react';
-import type { WeightUnit } from '../../domain/types';
+import type { MeasurementType, WeightUnit } from '../../domain/types';
 
 export type RoutineItemRowValue = {
   exerciseName: string;
+  measurementType?: MeasurementType;
   defaultSets?: number;
   defaultReps?: number;
   defaultWeight?: number;
   defaultWeightUnit?: WeightUnit;
+  defaultDurationSeconds?: number;
   restSeconds?: number;
   notes?: string;
 };
@@ -34,6 +36,12 @@ export function RoutineItemRow({
   dragHandle,
 }: RoutineItemRowProps) {
   const effectiveWeightUnit = item.defaultWeightUnit ?? weightUnit;
+  // Catalog-decided type: which default fields make sense for this exercise.
+  // No per-item toggle — the editor only reflects the resolved type.
+  const measurementType = item.measurementType ?? 'weight_reps';
+  const showReps = measurementType === 'weight_reps' || measurementType === 'reps';
+  const showDuration = measurementType === 'duration';
+  const showWeight = measurementType !== 'distance_duration';
 
   return (
     <Card withBorder radius="lg" padding="md">
@@ -70,36 +78,52 @@ export function RoutineItemRow({
             step={1}
             allowDecimal={false}
           />
-          <NumberInput
-            label="Reps"
-            value={item.defaultReps}
-            onChange={(value) => onChange({ defaultReps: typeof value === 'number' ? value : undefined })}
-            min={0}
-            step={1}
-            allowDecimal={false}
-          />
+          {showReps ? (
+            <NumberInput
+              label="Reps"
+              value={item.defaultReps}
+              onChange={(value) => onChange({ defaultReps: typeof value === 'number' ? value : undefined })}
+              min={0}
+              step={1}
+              allowDecimal={false}
+            />
+          ) : null}
+          {showDuration ? (
+            <NumberInput
+              label="Duration (s)"
+              value={item.defaultDurationSeconds}
+              onChange={(value) =>
+                onChange({ defaultDurationSeconds: typeof value === 'number' ? value : undefined })
+              }
+              min={0}
+              step={5}
+              allowDecimal={false}
+            />
+          ) : null}
         </Group>
 
-        <Group align="flex-end" gap="sm" wrap="nowrap">
-          <NumberInput
-            label={`Weight (${effectiveWeightUnit})`}
-            value={item.defaultWeight}
-            onChange={(value) =>
-              onChange({
-                defaultWeight: typeof value === 'number' ? value : undefined,
-                defaultWeightUnit: typeof value === 'number' ? effectiveWeightUnit : undefined,
-              })
-            }
-            min={0}
-            step={effectiveWeightUnit === 'kg' ? 1 : 5}
-            style={{ flex: 1 }}
-          />
-          <SegmentedControl
-            data={['lb', 'kg']}
-            value={effectiveWeightUnit}
-            onChange={(value) => onChange({ defaultWeightUnit: value as WeightUnit })}
-          />
-        </Group>
+        {showWeight ? (
+          <Group align="flex-end" gap="sm" wrap="nowrap">
+            <NumberInput
+              label={`Weight (${effectiveWeightUnit})`}
+              value={item.defaultWeight}
+              onChange={(value) =>
+                onChange({
+                  defaultWeight: typeof value === 'number' ? value : undefined,
+                  defaultWeightUnit: typeof value === 'number' ? effectiveWeightUnit : undefined,
+                })
+              }
+              min={0}
+              step={effectiveWeightUnit === 'kg' ? 1 : 5}
+              style={{ flex: 1 }}
+            />
+            <SegmentedControl
+              data={['lb', 'kg']}
+              value={effectiveWeightUnit}
+              onChange={(value) => onChange({ defaultWeightUnit: value as WeightUnit })}
+            />
+          </Group>
+        ) : null}
 
         <NumberInput
           label="Rest (s)"

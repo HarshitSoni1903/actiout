@@ -1,7 +1,7 @@
 import type { WeightUnit } from '../../domain/types';
 import { formatWeight } from '../../domain/units';
 import type { PRSummary } from '../../services/analytics-service';
-import { formatShortDate } from '../../utils/dates';
+import { formatShortDate } from '../../utils';
 
 export type PRBlockProps = {
   prs: PRSummary;

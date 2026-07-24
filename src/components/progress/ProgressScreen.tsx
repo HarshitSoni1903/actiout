@@ -11,7 +11,7 @@ import {
 import { deleteBodyweight, listBodyweight } from '../../services/bodyweight-service';
 import { getPreferences } from '../../services/preference-service';
 import { formatWeight } from '../../domain/units';
-import { formatShortDate } from '../../utils/dates';
+import { formatShortDate } from '../../utils';
 import { useUiStore } from '../../state/ui-store';
 import { SegmentedControl } from '../common/SegmentedControl';
 import type { SegmentedControlOption } from '../common/SegmentedControl';

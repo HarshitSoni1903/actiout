@@ -8,7 +8,7 @@ import { getPreferences } from '../../services/preference-service';
 import { listRoutines, routinesForWeekday } from '../../services/routine-service';
 import { dnfSession, getActiveDraft, listSessions } from '../../services/session-service';
 import { useUiStore } from '../../state/ui-store';
-import { todayLocalDate, weekdayOf } from '../../utils/dates';
+import { todayLocalDate, weekdayOf } from '../../utils';
 import { summaryLine } from '../routines/routine-summary';
 import { BodyweightQuickAdd } from './BodyweightQuickAdd';
 import { DraftCard } from './DraftCard';

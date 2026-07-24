@@ -1,4 +1,4 @@
-import { localDateDaysAgo, weekdayOf } from '../../utils/dates';
+import { localDateDaysAgo, weekdayOf } from '../../utils';
 import { EmptyState } from '../common/EmptyState';
 
 export type ConsistencyStripProps = {

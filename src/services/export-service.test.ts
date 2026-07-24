@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { BodyweightEntry } from '../domain/types';
 import { ActiOutDB } from '../db/schema';
 import { initializeDb } from '../db/seed';
-import { nowIso } from '../utils/dates';
+import { nowIso } from '../utils';
 import { createRoutine, listRoutines, type RoutineInput } from './routine-service';
 import { completeSession, listSessions, startSession } from './session-service';
 import { addSet } from './session-set-service';

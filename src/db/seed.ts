@@ -1,7 +1,6 @@
 import type { ExerciseCategory, MeasurementType } from '../domain/types';
 import { normalizeExerciseName } from '../services/exercise-service';
-import { nowIso } from '../utils/dates';
-import { newId } from '../utils/ids';
+import { newId, nowIso } from '../utils';
 import { ActiOutDB, db } from './schema';
 
 export const STARTER_EXERCISES: ReadonlyArray<{

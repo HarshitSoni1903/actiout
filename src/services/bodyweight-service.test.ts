@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ActiOutDB } from '../db/schema';
 import { initializeDb } from '../db/seed';
-import { todayLocalDate } from '../utils/dates';
+import { todayLocalDate } from '../utils';
 import { addBodyweight, deleteBodyweight, listBodyweight } from './bodyweight-service';
 
 describe('bodyweight-service (db-backed)', () => {

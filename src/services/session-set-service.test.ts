@@ -3,7 +3,7 @@ import { ActiOutDB } from '../db/schema';
 import { getPreferences } from './preference-service';
 import { initializeDb } from '../db/seed';
 import { addSet, updateSet, removeSet, listSetsForItem, listSetsForSession, isItemComplete } from './session-set-service';
-import { newId } from '../utils/ids';
+import { newId } from '../utils';
 
 let dbx: ActiOutDB;
 let itemId: string;

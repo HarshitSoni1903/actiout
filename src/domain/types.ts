@@ -77,6 +77,11 @@ export type RoutineTemplateItem = {
   restSeconds?: number;
   notes?: string;
   measurementType?: MeasurementType;
+  // Mirrors the resolved exercise catalog entry's category at build time (see
+  // routine-service.ts buildItemRows) — carried on the item so re-opening the
+  // editor can seed it back into RoutineItemInput.category without a
+  // separate catalog lookup.
+  category?: ExerciseCategory;
 };
 
 export type Session = {

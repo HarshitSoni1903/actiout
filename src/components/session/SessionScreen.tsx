@@ -31,10 +31,11 @@ import {
   itemPhase,
   orderSessionItems,
 } from '../../services/session-flow';
+import type { EnsureExerciseOptions } from '../../services/exercise-service';
 import { isItemComplete, listSetsForSession } from '../../services/session-set-service';
 import { useUiStore } from '../../state/ui-store';
+import { ExerciseTypeahead } from '../routines/ExerciseTypeahead';
 import { EmptyState } from '../common/EmptyState';
-import { AddExerciseRow } from './AddExerciseRow';
 import { FinishBar } from './FinishBar';
 import { SessionHeader } from './SessionHeader';
 import { SessionItemCard, type SessionItemCardProps, type SessionItemUpdate } from './SessionItemCard';
@@ -232,9 +233,9 @@ export function SessionScreen() {
     );
   };
 
-  const handleAddItem = (name: string) => {
+  const handleAddItem = (name: string, opts?: EnsureExerciseOptions) => {
     void withErrorToast(
-      () => addSessionItem(session.id, name),
+      () => addSessionItem(session.id, name, opts),
       (message) => showToast(message, 'error'),
       'Could not add exercise.'
     );
@@ -341,7 +342,7 @@ export function SessionScreen() {
           }}
         >
           <Stack gap="sm">
-            <AddExerciseRow onPick={handleAddItem} />
+            <ExerciseTypeahead onPick={handleAddItem} placeholder="+ Add exercise" />
             <FinishBar doneCount={doneCount} total={session.items.length} onFinish={() => void handleFinish()} />
           </Stack>
         </Box>

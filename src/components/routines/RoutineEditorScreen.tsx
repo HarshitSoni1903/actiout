@@ -27,8 +27,9 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSo
 import type { RoutineInput, RoutineItemInput } from '../../services/routine-service';
 import { createRoutine, deleteRoutine, getRoutine, updateRoutine } from '../../services/routine-service';
 import { getPreferences } from '../../services/preference-service';
+import type { EnsureExerciseOptions } from '../../services/exercise-service';
 import { useUiStore } from '../../state/ui-store';
-import { newId } from '../../utils/ids';
+import { newId } from '../../utils';
 import { ExerciseTypeahead } from './ExerciseTypeahead';
 import { SortableRoutineRow } from './SortableRoutineRow';
 
@@ -98,10 +99,13 @@ export function RoutineEditorScreen() {
         existingRoutine.items.map((item) => ({
           clientId: newId(),
           exerciseName: item.exerciseNameSnapshot,
+          measurementType: item.measurementType,
+          category: item.category,
           defaultSets: item.defaultSets,
           defaultReps: item.defaultReps,
           defaultWeight: item.defaultWeight,
           defaultWeightUnit: item.defaultWeightUnit,
+          defaultDurationSeconds: item.defaultDurationSeconds,
           restSeconds: item.restSeconds,
           notes: item.notes,
         }))
@@ -117,8 +121,17 @@ export function RoutineEditorScreen() {
     setDaysOfWeek(values.map((value) => Number(value)).sort((a, b) => a - b));
   }
 
-  function addItem(exerciseName: string) {
-    setItems((prev) => [...prev, { clientId: newId(), exerciseName, restSeconds: 90 }]);
+  function addItem(exerciseName: string, opts?: EnsureExerciseOptions) {
+    setItems((prev) => [
+      ...prev,
+      {
+        clientId: newId(),
+        exerciseName,
+        restSeconds: 90,
+        measurementType: opts?.measurementType,
+        category: opts?.category,
+      },
+    ]);
   }
 
   function updateItem(clientId: string, patch: Partial<EditorItem>) {

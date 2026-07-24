@@ -1,7 +1,6 @@
 import type { SessionItem, SessionSet, WeightUnit } from '../domain/types';
 import { ActiOutDB, db } from '../db/schema';
-import { nowIso } from '../utils/dates';
-import { newId } from '../utils/ids';
+import { newId, nowIso } from '../utils';
 
 // Stamps activatedAt on first tap. No-op (no write at all) if already
 // activated, so a repeated tap can never move the item's rank in the
@@ -95,7 +94,9 @@ export async function applyAggregateSets(
         weightUnit: agg.weight !== undefined ? agg.weightUnit : row.weightUnit,
         durationSeconds: agg.durationSeconds ?? row.durationSeconds,
         distance: agg.distance ?? row.distance,
-        distanceUnit: agg.distanceUnit ?? row.distanceUnit,
+        // The unit only travels with a distance — a type whose mi/km control
+        // is hidden must never silently relabel an existing distance.
+        distanceUnit: agg.distance !== undefined ? agg.distanceUnit : row.distanceUnit,
         isWarmup: false,
         completed: true,
         updatedAt: now,

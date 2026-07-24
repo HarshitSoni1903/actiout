@@ -1,7 +1,6 @@
 import type { AppEvent } from '../domain/types';
 import { ActiOutDB, db } from '../db/schema';
-import { nowIso } from '../utils/dates';
-import { newId } from '../utils/ids';
+import { newId, nowIso } from '../utils';
 
 // Append-only event log entry for the future sync abstraction. `payload` is
 // JSON-stringified into `payloadJson`; omitted payload is stored as 'null'.

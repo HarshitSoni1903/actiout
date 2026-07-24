@@ -14,7 +14,7 @@ import * as bodyweightService from './services/bodyweight-service';
 import * as preferenceService from './services/preference-service';
 import * as routineService from './services/routine-service';
 import * as sessionService from './services/session-service';
-import { requestPersistentStorage } from './utils/storage';
+import { requestPersistentStorage } from './utils';
 import { router } from './app/routes';
 import { mantineTheme } from './app/mantine-theme';
 import './app/styles/global.css';

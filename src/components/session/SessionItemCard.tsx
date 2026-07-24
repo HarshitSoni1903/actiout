@@ -87,7 +87,8 @@ function buildSummary(
   item: SessionItem,
   last: LastPerformance,
   sets: SessionSet[],
-  measurementType: MeasurementType
+  measurementType: MeasurementType,
+  preferenceDistanceUnit: 'mi' | 'km'
 ): string | undefined {
   if (measurementType === 'duration') {
     const timed = sets.filter((set) => set.durationSeconds !== undefined);
@@ -104,10 +105,10 @@ function buildSummary(
     if (first) {
       const parts: string[] = [];
       if (first.distance !== undefined) {
-        parts.push(`${first.distance} ${first.distanceUnit ?? 'mi'}`);
+        parts.push(`${first.distance} ${first.distanceUnit ?? preferenceDistanceUnit}`);
       }
       if (first.durationSeconds !== undefined) {
-        parts.push(formatDuration(first.durationSeconds));
+        parts.push(formatHold(first.durationSeconds));
       }
       const head = parts.join(' · ');
       return logged.length > 1 ? `${logged.length} × ${head}` : head;
@@ -131,27 +132,36 @@ function buildSummary(
   return undefined;
 }
 
-// One-line read-only description of a logged set, fields per measurement type.
-function describeSet(set: SessionSet, measurementType: MeasurementType): string {
+// One-line read-only description of a logged set, fields and separator matching
+// the collapsed summary for the same measurement type.
+function describeSet(
+  set: SessionSet,
+  measurementType: MeasurementType,
+  preferenceDistanceUnit: 'mi' | 'km'
+): string {
+  const repsBased = measurementType === 'weight_reps' || measurementType === 'reps';
   const parts: string[] = [];
-  if (measurementType === 'weight_reps' || measurementType === 'reps') {
+  if (repsBased) {
     parts.push(`${set.reps ?? '-'} reps`);
   }
   if (measurementType === 'distance_duration' && set.distance !== undefined) {
-    parts.push(`${set.distance} ${set.distanceUnit ?? 'mi'}`);
+    parts.push(`${set.distance} ${set.distanceUnit ?? preferenceDistanceUnit}`);
   }
   if (
     (measurementType === 'duration' || measurementType === 'distance_duration') &&
     set.durationSeconds !== undefined
   ) {
-    parts.push(formatDuration(set.durationSeconds));
+    parts.push(formatHold(set.durationSeconds));
   }
   if (measurementType === 'weight_reps') {
     parts.push(`${set.weight ?? '-'} ${set.weightUnit}`);
   } else if (set.weight !== undefined) {
     parts.push(`${set.weight} ${set.weightUnit}`);
   }
-  return parts.length > 0 ? parts.join(' × ') : '-';
+  if (parts.length === 0) {
+    return '-';
+  }
+  return parts.join(repsBased ? ' × ' : ' · ');
 }
 
 function StatusIcon({ phase, isDnf }: { phase: ItemPhase; isDnf: boolean }) {
@@ -220,24 +230,57 @@ export function SessionItemCard({
   const showDistance = measurementType === 'distance_duration';
   const weightIsPrimary = measurementType === 'weight_reps';
 
-  const summary = buildSummary(item, lastPerformance, sets, measurementType);
+  const summary = buildSummary(item, lastPerformance, sets, measurementType, preferenceDistanceUnit);
   const summaryLabel = showReps ? 'Prev' : 'Logged';
   const isDnf = item.dnfAt !== undefined;
 
   // Prefill the basic-mode aggregate draft when the card opens; reset on close
-  // so the next open recomputes. Once seeded we never clobber user edits, but
-  // we still fill in if liveQuery data lands after the open (prev ?? …).
+  // so the next open recomputes. Seeding happens once (draft stays null until
+  // then, so liveQuery data landing after the open still seeds it) and never
+  // clobbers user edits afterwards. A prefilled weight opens the weight add-on
+  // so it is never carried invisibly; closing it manually sticks because the
+  // draft is already seeded by then.
+  // For distance_duration, computeAggregatePrefill has no history source for
+  // distance, so it seeds distanceUnit from the preference — that is wrong
+  // once a set has already been logged (the stored unit must win, so
+  // re-opening the card never shows a mismatched control that could relabel
+  // the logged distance on Completed). Override from the first non-warmup
+  // set's own distanceUnit when one exists.
   useEffect(() => {
     if (!expanded) {
       setDraft(null);
       setWeightOpen(false);
       return;
     }
-    setDraft(
-      (prev) =>
-        prev ?? computeAggregatePrefill(item, lastPerformance, preferenceUnit, measurementType, preferenceDistanceUnit)
+    if (draft) {
+      return;
+    }
+    const seeded = computeAggregatePrefill(
+      item,
+      lastPerformance,
+      preferenceUnit,
+      measurementType,
+      preferenceDistanceUnit
     );
-  }, [expanded, lastPerformance, preferenceUnit, measurementType, preferenceDistanceUnit, item.setsPlanned, item.repsPlanned]);
+    if (measurementType === 'distance_duration') {
+      const storedUnit = sets.find((set) => !set.isWarmup && set.distanceUnit !== undefined)?.distanceUnit;
+      if (storedUnit) {
+        seeded.distanceUnit = storedUnit;
+      }
+    }
+    setDraft(seeded);
+    setWeightOpen(seeded.weight !== undefined);
+  }, [
+    expanded,
+    draft,
+    lastPerformance,
+    preferenceUnit,
+    measurementType,
+    preferenceDistanceUnit,
+    item.setsPlanned,
+    item.repsPlanned,
+    sets,
+  ]);
 
   function expandNotes() {
     setNotesDraft(item.notes ?? '');
@@ -394,6 +437,7 @@ export function SessionItemCard({
           key={set.id}
           set={set}
           measurementType={measurementType}
+          preferenceDistanceUnit={preferenceDistanceUnit}
           onChange={(patch) => handleSetChange(set, patch)}
           onRemove={() => handleRemoveSet(set.id)}
           timerSlot={<SetRowTimer set={set} />}
@@ -443,7 +487,7 @@ export function SessionItemCard({
             <Stack gap={4}>
               {sets.map((set) => (
                 <Text key={set.id} size="sm">
-                  Set {set.setNumber}: {describeSet(set, measurementType)}
+                  Set {set.setNumber}: {describeSet(set, measurementType, preferenceDistanceUnit)}
                   {set.isWarmup ? ' (warmup)' : ''}
                   {set.completed ? ' ✓' : ''}
                 </Text>

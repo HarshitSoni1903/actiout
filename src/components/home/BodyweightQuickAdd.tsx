@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, Card, Group, NumberInput, Text } from '@mantine/core';
 import type { WeightUnit } from '../../domain/types';
 import { convertWeight, formatWeight } from '../../domain/units';
-import { formatShortDate } from '../../utils/dates';
+import { formatShortDate } from '../../utils';
 
 export type BodyweightQuickAddProps = {
   latestValue?: number;

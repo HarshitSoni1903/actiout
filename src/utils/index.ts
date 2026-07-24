@@ -40,3 +40,42 @@ export function formatShortDate(localDate: string): string {
   const date = new Date(year as number, (month as number) - 1, day as number);
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
 }
+
+export function newId(): string {
+  return crypto.randomUUID();
+}
+
+// Canonical text normalization used as a uniqueness/dedup key (e.g. the
+// exercise catalog's `normalizedName`): trim, collapse internal whitespace
+// runs to a single space, lowercase. Zero dependencies so it can be imported
+// from both the service layer and plain (Dexie-free) logic modules.
+export function normalizeExerciseName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Browser persistent storage utilities.
+ * Never throw; safely degrade when navigator.storage is unavailable.
+ */
+
+export async function requestPersistentStorage(): Promise<boolean> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.storage?.persist) {
+      return false;
+    }
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
+export async function getStoragePersisted(): Promise<boolean> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.storage?.persisted) {
+      return false;
+    }
+    return await navigator.storage.persisted();
+  } catch {
+    return false;
+  }
+}

@@ -3,7 +3,7 @@ import type { SessionItem } from '../domain/types';
 import { ActiOutDB } from '../db/schema';
 import { initializeDb } from '../db/seed';
 import { addSet } from './session-set-service';
-import { newId } from '../utils/ids';
+import { newId } from '../utils';
 import {
   activateSessionItem,
   dnfSessionItem,
@@ -212,6 +212,26 @@ describe('applyAggregateSets', () => {
     expect(sets.length).toBe(1);
     expect(sets[0]?.weight).toBe(100);
     expect(sets[0]?.reps).toBe(8);
+  });
+
+  it('keeps the existing distanceUnit when a later agg call omits distance, even if it still carries a distanceUnit (real UI shape: preference unit sent while distance input is blank)', async () => {
+    await applyAggregateSets(itemId, { sets: 1, weightUnit: 'lb', distance: 5, distanceUnit: 'km' }, dbx);
+    await applyAggregateSets(itemId, { sets: 1, weightUnit: 'lb', distanceUnit: 'mi' }, dbx);
+
+    const sets = await dbx.sessionSets.where('sessionItemId').equals(itemId).toArray();
+    expect(sets.length).toBe(1);
+    expect(sets[0]?.distance).toBe(5);
+    expect(sets[0]?.distanceUnit).toBe('km');
+  });
+
+  it('applies the incoming distanceUnit when the agg call does provide a distance', async () => {
+    await applyAggregateSets(itemId, { sets: 1, weightUnit: 'lb', distance: 5, distanceUnit: 'km' }, dbx);
+    await applyAggregateSets(itemId, { sets: 1, weightUnit: 'lb', distance: 3, distanceUnit: 'mi' }, dbx);
+
+    const sets = await dbx.sessionSets.where('sessionItemId').equals(itemId).toArray();
+    expect(sets.length).toBe(1);
+    expect(sets[0]?.distance).toBe(3);
+    expect(sets[0]?.distanceUnit).toBe('mi');
   });
 
   it('keeps the existing weightUnit when a later agg call omits the weight', async () => {
